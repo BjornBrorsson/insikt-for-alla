@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicHooksInlasningRouteImport } from './routes/api/public/hooks/inlasning'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksInlasningRoute = ApiPublicHooksInlasningRouteImport.update({
+  id: '/api/public/hooks/inlasning',
+  path: '/api/public/hooks/inlasning',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/hooks/inlasning': typeof ApiPublicHooksInlasningRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/hooks/inlasning': typeof ApiPublicHooksInlasningRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/hooks/inlasning': typeof ApiPublicHooksInlasningRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/public/hooks/inlasning'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/public/hooks/inlasning'
+  id: '__root__' | '/' | '/api/public/hooks/inlasning'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicHooksInlasningRoute: typeof ApiPublicHooksInlasningRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/inlasning': {
+      id: '/api/public/hooks/inlasning'
+      path: '/api/public/hooks/inlasning'
+      fullPath: '/api/public/hooks/inlasning'
+      preLoaderRoute: typeof ApiPublicHooksInlasningRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicHooksInlasningRoute: ApiPublicHooksInlasningRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
