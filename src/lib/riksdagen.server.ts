@@ -271,7 +271,7 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
 
   // Beslutspunkter
   const forslag = asArray(
-    ((block["utskottsforslag"] ?? {}) as Json)["utskottsforslag"] as Json | Json[],
+    ((block["dokutskottsforslag"] ?? {}) as Json)["utskottsforslag"] as Json | Json[],
   );
   const punktRader = forslag
     .map((f) => {
