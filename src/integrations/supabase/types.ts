@@ -610,6 +610,78 @@ export type Database = {
         }
         Returns: boolean
       }
+      jamfor_ledamoter: {
+        Args: {
+          _a: string
+          _b: string
+          _fran?: string
+          _sakfraga?: string
+          _till?: string
+        }
+        Returns: {
+          beteckning: string
+          datum: string
+          jamforbar: boolean
+          lika: boolean
+          punkt: string
+          rost_a: string
+          rost_b: string
+          titel: string
+          votering_id: string
+        }[]
+      }
+      jamfor_partier: {
+        Args: {
+          _a: string
+          _b: string
+          _fran?: string
+          _sakfraga?: string
+          _till?: string
+        }
+        Returns: {
+          beteckning: string
+          datum: string
+          jamforbar: boolean
+          lika: boolean
+          majoritet_a: string
+          majoritet_b: string
+          punkt: string
+          titel: string
+          votering_id: string
+        }[]
+      }
+      ledamot_sammanfattning: {
+        Args: {
+          _fran?: string
+          _ledamot: string
+          _sakfraga?: string
+          _till?: string
+        }
+        Returns: {
+          avstar: number
+          franvarande: number
+          ja: number
+          jamforbara: number
+          lika_med_partimajoritet: number
+          nej: number
+        }[]
+      }
+      parti_likhet: {
+        Args: { _fran?: string; _parti: string; _till?: string }
+        Returns: {
+          gemensamma: number
+          lika: number
+          parti: string
+        }[]
+      }
+      parti_sammanhallning: {
+        Args: { _fran?: string; _parti: string; _till?: string }
+        Returns: {
+          avgivna_roster: number
+          enligt_majoritet: number
+          voteringar: number
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
