@@ -10,11 +10,125 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as BevakningarRouteImport } from './routes/bevakningar'
+import { Route as JamforRouteImport } from './routes/jamfor'
+import { Route as KallorOchMetodRouteImport } from './routes/kallor-och-metod'
+import { Route as OmInsiktRouteImport } from './routes/om-insikt'
+import { Route as OrdlistaRouteImport } from './routes/ordlista'
+import { Route as RapporteraFelRouteImport } from './routes/rapportera-fel'
+import { Route as SokRouteImport } from './routes/sok'
+import { Route as ArendenIdRouteImport } from './routes/arenden/$id'
+import { Route as LedamoterIndexRouteImport } from './routes/ledamoter/index'
+import { Route as LedamoterIdRouteImport } from './routes/ledamoter/$id'
+import { Route as PartierIndexRouteImport } from './routes/partier/index'
+import { Route as PartierKodRouteImport } from './routes/partier/$kod'
+import { Route as SakfragorIndexRouteImport } from './routes/sakfragor/index'
+import { Route as SakfragorSlugRouteImport } from './routes/sakfragor/$slug'
+import { Route as ValkretsarIndexRouteImport } from './routes/valkretsar/index'
+import { Route as ValkretsarNamnRouteImport } from './routes/valkretsar/$namn'
+import { Route as VoteringarIndexRouteImport } from './routes/voteringar/index'
+import { Route as VoteringarIdRouteImport } from './routes/voteringar/$id'
 import { Route as ApiPublicHooksInlasningRouteImport } from './routes/api/public/hooks/inlasning'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BevakningarRoute = BevakningarRouteImport.update({
+  id: '/bevakningar',
+  path: '/bevakningar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JamforRoute = JamforRouteImport.update({
+  id: '/jamfor',
+  path: '/jamfor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KallorOchMetodRoute = KallorOchMetodRouteImport.update({
+  id: '/kallor-och-metod',
+  path: '/kallor-och-metod',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OmInsiktRoute = OmInsiktRouteImport.update({
+  id: '/om-insikt',
+  path: '/om-insikt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrdlistaRoute = OrdlistaRouteImport.update({
+  id: '/ordlista',
+  path: '/ordlista',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RapporteraFelRoute = RapporteraFelRouteImport.update({
+  id: '/rapportera-fel',
+  path: '/rapportera-fel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SokRoute = SokRouteImport.update({
+  id: '/sok',
+  path: '/sok',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArendenIdRoute = ArendenIdRouteImport.update({
+  id: '/arenden/$id',
+  path: '/arenden/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LedamoterIndexRoute = LedamoterIndexRouteImport.update({
+  id: '/ledamoter/',
+  path: '/ledamoter/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LedamoterIdRoute = LedamoterIdRouteImport.update({
+  id: '/ledamoter/$id',
+  path: '/ledamoter/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PartierIndexRoute = PartierIndexRouteImport.update({
+  id: '/partier/',
+  path: '/partier/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PartierKodRoute = PartierKodRouteImport.update({
+  id: '/partier/$kod',
+  path: '/partier/$kod',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SakfragorIndexRoute = SakfragorIndexRouteImport.update({
+  id: '/sakfragor/',
+  path: '/sakfragor/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SakfragorSlugRoute = SakfragorSlugRouteImport.update({
+  id: '/sakfragor/$slug',
+  path: '/sakfragor/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ValkretsarIndexRoute = ValkretsarIndexRouteImport.update({
+  id: '/valkretsar/',
+  path: '/valkretsar/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ValkretsarNamnRoute = ValkretsarNamnRouteImport.update({
+  id: '/valkretsar/$namn',
+  path: '/valkretsar/$namn',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VoteringarIndexRoute = VoteringarIndexRouteImport.update({
+  id: '/voteringar/',
+  path: '/voteringar/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VoteringarIdRoute = VoteringarIdRouteImport.update({
+  id: '/voteringar/$id',
+  path: '/voteringar/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicHooksInlasningRoute = ApiPublicHooksInlasningRouteImport.update({
@@ -25,27 +139,167 @@ const ApiPublicHooksInlasningRoute = ApiPublicHooksInlasningRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/bevakningar': typeof BevakningarRoute
+  '/jamfor': typeof JamforRoute
+  '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/om-insikt': typeof OmInsiktRoute
+  '/ordlista': typeof OrdlistaRoute
+  '/rapportera-fel': typeof RapporteraFelRoute
+  '/sok': typeof SokRoute
+  '/arenden/$id': typeof ArendenIdRoute
+  '/ledamoter/$id': typeof LedamoterIdRoute
+  '/partier/$kod': typeof PartierKodRoute
+  '/sakfragor/$slug': typeof SakfragorSlugRoute
+  '/valkretsar/$namn': typeof ValkretsarNamnRoute
+  '/voteringar/$id': typeof VoteringarIdRoute
+  '/ledamoter/': typeof LedamoterIndexRoute
+  '/partier/': typeof PartierIndexRoute
+  '/sakfragor/': typeof SakfragorIndexRoute
+  '/valkretsar/': typeof ValkretsarIndexRoute
+  '/voteringar/': typeof VoteringarIndexRoute
   '/api/public/hooks/inlasning': typeof ApiPublicHooksInlasningRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/bevakningar': typeof BevakningarRoute
+  '/jamfor': typeof JamforRoute
+  '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/om-insikt': typeof OmInsiktRoute
+  '/ordlista': typeof OrdlistaRoute
+  '/rapportera-fel': typeof RapporteraFelRoute
+  '/sok': typeof SokRoute
+  '/arenden/$id': typeof ArendenIdRoute
+  '/ledamoter/$id': typeof LedamoterIdRoute
+  '/partier/$kod': typeof PartierKodRoute
+  '/sakfragor/$slug': typeof SakfragorSlugRoute
+  '/valkretsar/$namn': typeof ValkretsarNamnRoute
+  '/voteringar/$id': typeof VoteringarIdRoute
+  '/ledamoter': typeof LedamoterIndexRoute
+  '/partier': typeof PartierIndexRoute
+  '/sakfragor': typeof SakfragorIndexRoute
+  '/valkretsar': typeof ValkretsarIndexRoute
+  '/voteringar': typeof VoteringarIndexRoute
   '/api/public/hooks/inlasning': typeof ApiPublicHooksInlasningRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/bevakningar': typeof BevakningarRoute
+  '/jamfor': typeof JamforRoute
+  '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/om-insikt': typeof OmInsiktRoute
+  '/ordlista': typeof OrdlistaRoute
+  '/rapportera-fel': typeof RapporteraFelRoute
+  '/sok': typeof SokRoute
+  '/arenden/$id': typeof ArendenIdRoute
+  '/ledamoter/$id': typeof LedamoterIdRoute
+  '/partier/$kod': typeof PartierKodRoute
+  '/sakfragor/$slug': typeof SakfragorSlugRoute
+  '/valkretsar/$namn': typeof ValkretsarNamnRoute
+  '/voteringar/$id': typeof VoteringarIdRoute
+  '/ledamoter/': typeof LedamoterIndexRoute
+  '/partier/': typeof PartierIndexRoute
+  '/sakfragor/': typeof SakfragorIndexRoute
+  '/valkretsar/': typeof ValkretsarIndexRoute
+  '/voteringar/': typeof VoteringarIndexRoute
   '/api/public/hooks/inlasning': typeof ApiPublicHooksInlasningRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/hooks/inlasning'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/bevakningar'
+    | '/jamfor'
+    | '/kallor-och-metod'
+    | '/om-insikt'
+    | '/ordlista'
+    | '/rapportera-fel'
+    | '/sok'
+    | '/arenden/$id'
+    | '/ledamoter/$id'
+    | '/partier/$kod'
+    | '/sakfragor/$slug'
+    | '/valkretsar/$namn'
+    | '/voteringar/$id'
+    | '/ledamoter/'
+    | '/partier/'
+    | '/sakfragor/'
+    | '/valkretsar/'
+    | '/voteringar/'
+    | '/api/public/hooks/inlasning'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/hooks/inlasning'
-  id: '__root__' | '/' | '/api/public/hooks/inlasning'
+  to:
+    | '/'
+    | '/admin'
+    | '/bevakningar'
+    | '/jamfor'
+    | '/kallor-och-metod'
+    | '/om-insikt'
+    | '/ordlista'
+    | '/rapportera-fel'
+    | '/sok'
+    | '/arenden/$id'
+    | '/ledamoter/$id'
+    | '/partier/$kod'
+    | '/sakfragor/$slug'
+    | '/valkretsar/$namn'
+    | '/voteringar/$id'
+    | '/ledamoter'
+    | '/partier'
+    | '/sakfragor'
+    | '/valkretsar'
+    | '/voteringar'
+    | '/api/public/hooks/inlasning'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/bevakningar'
+    | '/jamfor'
+    | '/kallor-och-metod'
+    | '/om-insikt'
+    | '/ordlista'
+    | '/rapportera-fel'
+    | '/sok'
+    | '/arenden/$id'
+    | '/ledamoter/$id'
+    | '/partier/$kod'
+    | '/sakfragor/$slug'
+    | '/valkretsar/$namn'
+    | '/voteringar/$id'
+    | '/ledamoter/'
+    | '/partier/'
+    | '/sakfragor/'
+    | '/valkretsar/'
+    | '/voteringar/'
+    | '/api/public/hooks/inlasning'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  BevakningarRoute: typeof BevakningarRoute
+  JamforRoute: typeof JamforRoute
+  KallorOchMetodRoute: typeof KallorOchMetodRoute
+  OmInsiktRoute: typeof OmInsiktRoute
+  OrdlistaRoute: typeof OrdlistaRoute
+  RapporteraFelRoute: typeof RapporteraFelRoute
+  SokRoute: typeof SokRoute
+  ArendenIdRoute: typeof ArendenIdRoute
+  LedamoterIdRoute: typeof LedamoterIdRoute
+  PartierKodRoute: typeof PartierKodRoute
+  SakfragorSlugRoute: typeof SakfragorSlugRoute
+  ValkretsarNamnRoute: typeof ValkretsarNamnRoute
+  VoteringarIdRoute: typeof VoteringarIdRoute
+  LedamoterIndexRoute: typeof LedamoterIndexRoute
+  PartierIndexRoute: typeof PartierIndexRoute
+  SakfragorIndexRoute: typeof SakfragorIndexRoute
+  ValkretsarIndexRoute: typeof ValkretsarIndexRoute
+  VoteringarIndexRoute: typeof VoteringarIndexRoute
   ApiPublicHooksInlasningRoute: typeof ApiPublicHooksInlasningRoute
 }
 
@@ -56,6 +310,139 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bevakningar': {
+      id: '/bevakningar'
+      path: '/bevakningar'
+      fullPath: '/bevakningar'
+      preLoaderRoute: typeof BevakningarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jamfor': {
+      id: '/jamfor'
+      path: '/jamfor'
+      fullPath: '/jamfor'
+      preLoaderRoute: typeof JamforRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kallor-och-metod': {
+      id: '/kallor-och-metod'
+      path: '/kallor-och-metod'
+      fullPath: '/kallor-och-metod'
+      preLoaderRoute: typeof KallorOchMetodRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/om-insikt': {
+      id: '/om-insikt'
+      path: '/om-insikt'
+      fullPath: '/om-insikt'
+      preLoaderRoute: typeof OmInsiktRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ordlista': {
+      id: '/ordlista'
+      path: '/ordlista'
+      fullPath: '/ordlista'
+      preLoaderRoute: typeof OrdlistaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rapportera-fel': {
+      id: '/rapportera-fel'
+      path: '/rapportera-fel'
+      fullPath: '/rapportera-fel'
+      preLoaderRoute: typeof RapporteraFelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sok': {
+      id: '/sok'
+      path: '/sok'
+      fullPath: '/sok'
+      preLoaderRoute: typeof SokRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/arenden/$id': {
+      id: '/arenden/$id'
+      path: '/arenden/$id'
+      fullPath: '/arenden/$id'
+      preLoaderRoute: typeof ArendenIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ledamoter/': {
+      id: '/ledamoter/'
+      path: '/ledamoter'
+      fullPath: '/ledamoter/'
+      preLoaderRoute: typeof LedamoterIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ledamoter/$id': {
+      id: '/ledamoter/$id'
+      path: '/ledamoter/$id'
+      fullPath: '/ledamoter/$id'
+      preLoaderRoute: typeof LedamoterIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/partier/': {
+      id: '/partier/'
+      path: '/partier'
+      fullPath: '/partier/'
+      preLoaderRoute: typeof PartierIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/partier/$kod': {
+      id: '/partier/$kod'
+      path: '/partier/$kod'
+      fullPath: '/partier/$kod'
+      preLoaderRoute: typeof PartierKodRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sakfragor/': {
+      id: '/sakfragor/'
+      path: '/sakfragor'
+      fullPath: '/sakfragor/'
+      preLoaderRoute: typeof SakfragorIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sakfragor/$slug': {
+      id: '/sakfragor/$slug'
+      path: '/sakfragor/$slug'
+      fullPath: '/sakfragor/$slug'
+      preLoaderRoute: typeof SakfragorSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/valkretsar/': {
+      id: '/valkretsar/'
+      path: '/valkretsar'
+      fullPath: '/valkretsar/'
+      preLoaderRoute: typeof ValkretsarIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/valkretsar/$namn': {
+      id: '/valkretsar/$namn'
+      path: '/valkretsar/$namn'
+      fullPath: '/valkretsar/$namn'
+      preLoaderRoute: typeof ValkretsarNamnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/voteringar/': {
+      id: '/voteringar/'
+      path: '/voteringar'
+      fullPath: '/voteringar/'
+      preLoaderRoute: typeof VoteringarIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/voteringar/$id': {
+      id: '/voteringar/$id'
+      path: '/voteringar/$id'
+      fullPath: '/voteringar/$id'
+      preLoaderRoute: typeof VoteringarIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/inlasning': {
@@ -70,6 +457,25 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  BevakningarRoute: BevakningarRoute,
+  JamforRoute: JamforRoute,
+  KallorOchMetodRoute: KallorOchMetodRoute,
+  OmInsiktRoute: OmInsiktRoute,
+  OrdlistaRoute: OrdlistaRoute,
+  RapporteraFelRoute: RapporteraFelRoute,
+  SokRoute: SokRoute,
+  ArendenIdRoute: ArendenIdRoute,
+  LedamoterIdRoute: LedamoterIdRoute,
+  PartierKodRoute: PartierKodRoute,
+  SakfragorSlugRoute: SakfragorSlugRoute,
+  ValkretsarNamnRoute: ValkretsarNamnRoute,
+  VoteringarIdRoute: VoteringarIdRoute,
+  LedamoterIndexRoute: LedamoterIndexRoute,
+  PartierIndexRoute: PartierIndexRoute,
+  SakfragorIndexRoute: SakfragorIndexRoute,
+  ValkretsarIndexRoute: ValkretsarIndexRoute,
+  VoteringarIndexRoute: VoteringarIndexRoute,
   ApiPublicHooksInlasningRoute: ApiPublicHooksInlasningRoute,
 }
 export const routeTree = rootRouteImport

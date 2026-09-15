@@ -945,3 +945,234 @@ export const rapporteraFel = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/* ------------------------------------------------------------------ */
+/* Administration                                                     */
+/* ------------------------------------------------------------------ */
+
+export const getAdminData = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const [inlasningar, felrapporter, sammanfattningar] = await Promise.all([
+    supabaseAdmin.from("inlasningar").select("*").order("startad", { ascending: false }).limit(30),
+    supabaseAdmin.from("felrapporter").select("*").order("skapad", { ascending: false }).limit(50),
+    supabaseAdmin
+      .from("ai_sammanfattningar")
+      .select("*, arenden(id, titel, beteckning)")
+      .order("skapad", { ascending: false })
+      .limit(50),
+  ]);
+
+  return {
+    inlasningar: inlasningar.data ?? [],
+    felrapporter: felrapporter.data ?? [],
+    sammanfattningar: sammanfattningar.data ?? [],
+  };
+});
+
+export const uppdateraFelrapport = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        id: z.string(),
+        status: z.string(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("felrapporter")
+      .update({ status: data.status })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const granskaAiSammanfattning = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        id: z.string(),
+        granskad: z.boolean(),
+        text: z.string().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const updatePayload: { granskad: boolean; sammanfattning?: string } = {
+      granskad: data.granskad,
+    };
+    if (data.text !== undefined) updatePayload.sammanfattning = data.text;
+    const { error } = await supabaseAdmin
+      .from("ai_sammanfattningar")
+      .update(updatePayload)
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const korInlasning = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        typ: z.enum(["ledamoter", "voteringar"]),
+        rm: z.string().default("2025/26"),
+        max: z.number().default(10),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { ingestLedamoter, ingestRiksmote } = await import("./riksdagen.server");
+    if (data.typ === "ledamoter") {
+      const res = await ingestLedamoter("tjanstgorande");
+      return res;
+    }
+    const res = await ingestRiksmote(data.rm, data.max);
+    return res;
+  });
+
+/* ------------------------------------------------------------------ */
+/* Motioner: Hämta information och sammanfattning för en motion       */
+/* ------------------------------------------------------------------ */
+
+export type MotionInfo = {
+  dok_id: string;
+  beteckning: string;
+  rm: string | null;
+  nummer: string | null;
+  typrubrik: string | null;
+  titel: string | null;
+  subtitel: string | null;
+  organ: string | null;
+  datum: string | null;
+  kalla_url: string;
+  undertecknare: { namn: string; parti: string | null; roll: string | null }[];
+  yrkanden: { nummer: string; lydelse: string; utskottet: string | null }[];
+  motivering: string | null;
+};
+
+const RM_PREFIX: Record<string, string> = {
+  "2026/27": "HE",
+  "2025/26": "HD",
+  "2024/25": "HC",
+  "2023/24": "HB",
+  "2022/23": "HA",
+  "2021/22": "H9",
+  "2020/21": "H8",
+  "2019/20": "H7",
+  "2018/19": "H6",
+  "2017/18": "H5",
+  "2016/17": "H4",
+  "2015/16": "H3",
+};
+
+function beraknaMotionDokId(bet: string): string | null {
+  const m = bet.match(/(\d{4}\/\d{2}):(\d+)/);
+  if (!m) return null;
+  const p = RM_PREFIX[m[1]];
+  if (!p) return null;
+  return `${p}02${m[2]}`;
+}
+
+const motionCache = new Map<string, MotionInfo>();
+
+export const getMotion = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) =>
+    z.object({ beteckning: z.string() }).parse(input),
+  )
+  .handler(async ({ data }): Promise<MotionInfo | null> => {
+    const sokBeteckning = data.beteckning.trim();
+    if (motionCache.has(sokBeteckning)) {
+      return motionCache.get(sokBeteckning)!;
+    }
+
+    try {
+      let dokId = beraknaMotionDokId(sokBeteckning);
+
+      if (!dokId) {
+        const listUrl = `https://data.riksdagen.se/dokumentlista/?sok=${encodeURIComponent(sokBeteckning)}&doktyp=mot&utformat=json`;
+        const listRes = await fetch(listUrl, { headers: { accept: "application/json" } });
+        if (listRes.ok) {
+          const listData = (await listRes.json()) as Record<string, unknown>;
+          const dokList = (listData["dokumentlista"] ?? {}) as Record<string, unknown>;
+          const dArray = dokList["dokument"];
+          const firstDok = Array.isArray(dArray) ? dArray[0] : dArray;
+          if (firstDok && typeof firstDok === "object") {
+            dokId = (firstDok as Record<string, unknown>)["dok_id"] as string || (firstDok as Record<string, unknown>)["id"] as string;
+          }
+        }
+      }
+
+      if (!dokId) return null;
+
+      const detUrl = `https://data.riksdagen.se/dokument/${dokId}.json`;
+      const detRes = await fetch(detUrl, { headers: { accept: "application/json" } });
+      if (!detRes.ok) return null;
+      const detData = (await detRes.json()) as Record<string, unknown>;
+      const dokStatus = (detData["dokumentstatus"] ?? {}) as Record<string, unknown>;
+      const d = (dokStatus["dokument"] ?? {}) as Record<string, unknown>;
+      const intressenter = (dokStatus["dokintressent"] as Record<string, unknown>)?.["intressent"];
+      const forslag = (dokStatus["dokforslag"] as Record<string, unknown>)?.["forslag"];
+
+      let motivering: string | null = null;
+      const html = d["html"];
+      if (typeof html === "string") {
+        const clean = html
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, "\n")
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n{2,}/g, "\n")
+          .trim();
+        const motIdx = clean.search(/motivering/i);
+        if (motIdx !== -1) {
+          motivering = clean.slice(motIdx, motIdx + 1500).replace(/^motivering\s*/i, "").trim();
+        }
+      }
+
+      type RawIntr = { namn?: string; partibet?: string; roll?: string };
+      type RawForslag = { nummer?: string; lydelse?: string; utskottet?: string };
+
+      const uLista = Array.isArray(intressenter)
+        ? (intressenter as RawIntr[])
+        : intressenter
+          ? [intressenter as RawIntr]
+          : [];
+      const fLista = Array.isArray(forslag)
+        ? (forslag as RawForslag[])
+        : forslag
+          ? [forslag as RawForslag]
+          : [];
+
+      const resultat: MotionInfo = {
+        dok_id: dokId,
+        beteckning: sokBeteckning,
+        rm: (d["rm"] as string) ?? null,
+        nummer: (d["nummer"] as string) ?? null,
+        typrubrik: (d["typrubrik"] as string) ?? null,
+        titel: (d["titel"] as string) ?? null,
+        subtitel: (d["subtitel"] as string) ?? null,
+        organ: (d["organ"] as string) ?? null,
+        datum: (d["datum"] as string) ?? null,
+        kalla_url: `https://data.riksdagen.se/dokument/${dokId}`,
+        undertecknare: uLista.map((i) => ({
+          namn: i.namn ?? "",
+          parti: i.partibet ?? null,
+          roll: i.roll ?? null,
+        })),
+        yrkanden: fLista.map((f) => ({
+          nummer: f.nummer ?? "",
+          lydelse: f.lydelse ?? "",
+          utskottet: f.utskottet ?? null,
+        })),
+        motivering,
+      };
+
+      motionCache.set(sokBeteckning, resultat);
+      return resultat;
+    } catch {
+      return null;
+    }
+  });
+
+
