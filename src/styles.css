@@ -142,3 +142,26 @@
     color: var(--color-foreground);
   }
 }
+
+/* Insikt: egna tokens för röster, partier och ytor. */
+:root {
+  --accent-insikt: oklch(0.45 0.11 232);
+  --accent-insikt-svag: oklch(0.95 0.02 232);
+  --yta: oklch(0.985 0.004 95);
+  --rost-ja: oklch(0.55 0.11 168);
+  --rost-nej: oklch(0.52 0.16 25);
+  --rost-avstar: oklch(0.62 0.09 85);
+  --rost-franvarande: oklch(0.72 0.01 260);
+  --font-rubrik: "Instrument Serif", Georgia, serif;
+  --font-brod: "Work Sans", system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-brod);
+}
+
+h1, h2, .rubrik {
+  font-family: var(--font-rubrik);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
