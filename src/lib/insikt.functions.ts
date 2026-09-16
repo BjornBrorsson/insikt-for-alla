@@ -116,6 +116,23 @@ type PartitotalDoc = {
   sakfragor: string[];
 };
 
+type UppdragDoc = {
+  ledamot_id?: string;
+  organ_kod: string | null;
+  roll: string | null;
+  typ: string | null;
+  status: string | null;
+  fran: string | null;
+  till: string | null;
+};
+
+/** Faktauppgift ur riksdagens uppdragsregister som kan ge kontext åt frånvaro. */
+export type FranvaroKontext = {
+  text: string;
+  fran: string | null;
+  till: string | null;
+};
+
 /** En post i rostmatriser/{ledamot_id} eller partimajoriteter/{parti}. */
 type MatrisPost = {
   rost?: string;
@@ -143,6 +160,31 @@ function harSakfraga(sakfragor: string[] | undefined, sakfraga?: string | null) 
 function textSok(q: string, ...falt: (string | null | undefined)[]) {
   const s = q.toLowerCase();
   return falt.some((f) => f?.toLowerCase().includes(s));
+}
+
+function uppdragOverlappar(u: UppdragDoc, fran: string | null, till: string | null) {
+  if (u.fran && till && u.fran > till) return false;
+  if (u.till && fran && u.till < fran) return false;
+  return true;
+}
+
+/**
+ * Etikett för ett uppdrag som kan ge kontext åt frånvaro i kammaren,
+ * annars null. Statsråd uppträder ofta även som "Ledig" i kammaruppdraget –
+ * prioritet ges åt den mer specifika orsaken.
+ */
+function franvaroEtikett(u: UppdragDoc): string | null {
+  if (u.typ === "Departement" && u.roll === "Statsråd")
+    return u.organ_kod ? `Statsråd (${u.organ_kod})` : "Statsråd";
+  if (u.typ === "Europaparlamentet") return "Ledamot av Europaparlamentet";
+  if (u.typ === "kammaruppdrag" && (u.status ?? "").startsWith("Ledig")) return "Ledig";
+  return null;
+}
+
+function franvaroPrio(etikett: string) {
+  if (etikett.startsWith("Statsråd")) return 0;
+  if (etikett.startsWith("Ledamot av")) return 1;
+  return 2;
 }
 
 /* ------------------------------------------------------------------ */
@@ -367,8 +409,14 @@ export const getLedamot = createServerFn({ method: "GET" })
       jamforbara: 0,
       lika_med_partimajoritet: 0,
     };
+    let forstaDatum: string | null = null;
+    let sistaDatum: string | null = null;
     for (const p of Object.values(matris?.poster ?? {})) {
       if (!iPeriod(p.datum, fran, till)) continue;
+      if (p.datum) {
+        if (!forstaDatum || p.datum < forstaDatum) forstaDatum = p.datum;
+        if (!sistaDatum || p.datum > sistaDatum) sistaDatum = p.datum;
+      }
       const rost = p.rost ?? "";
       if (rost === "Ja") s.ja += 1;
       else if (rost === "Nej") s.nej += 1;
@@ -380,7 +428,30 @@ export const getLedamot = createServerFn({ method: "GET" })
       }
     }
 
-    return { ledamot, uppdrag, roster: rostRader, sammanfattning: s };
+    // Uppdrag i uppdragsregistret som överlappar den statistik som visas –
+    // kan ge kontext åt frånvaron (statsråd, EU-uppdrag, registrerad ledighet).
+    const franvaroKontext: FranvaroKontext[] = [];
+    if (forstaDatum && sistaDatum) {
+      const sett = new Set<string>();
+      for (const u of uppdrag) {
+        const text = franvaroEtikett(u);
+        if (!text || !uppdragOverlappar(u, forstaDatum, sistaDatum)) continue;
+        const nyckel = `${text}|${u.fran}|${u.till}`;
+        if (sett.has(nyckel)) continue;
+        sett.add(nyckel);
+        franvaroKontext.push({ text, fran: u.fran, till: u.till });
+      }
+      franvaroKontext.sort((a, b) => (a.fran ?? "").localeCompare(b.fran ?? ""));
+    }
+    if (ledamot.status && ledamot.status !== TJANSTGORANDE) {
+      franvaroKontext.push({
+        text: `Nuvarande status enligt riksdagen: ${ledamot.status}`,
+        fran: null,
+        till: null,
+      });
+    }
+
+    return { ledamot, uppdrag, roster: rostRader, sammanfattning: s, franvaroKontext };
   });
 
 /* ------------------------------------------------------------------ */
@@ -750,6 +821,30 @@ export const getVotering = createServerFn({ method: "GET" })
 
     const partitotaler = partitotalerSnap.docs.map((d) => d.data() as PartitotalDoc);
 
+    // Kontext för frånvarande ledamöter: uppdrag i riksdagens register som
+    // täcker voteringens datum (ledighet, statsrådsuppdrag, Europaparlamentet).
+    const narvaroStatus = new Map<string, { text: string; prio: number }>();
+    const franvarandeIds = [
+      ...new Set(rosterDocs.filter((r) => r.rost === "Frånvarande").map((r) => r.ledamot_id)),
+    ];
+    if (votering.datum && franvarandeIds.length > 0) {
+      for (let i = 0; i < franvarandeIds.length; i += 30) {
+        const uppdragSnap = await db
+          .collection("uppdrag")
+          .where("ledamot_id", "in", franvarandeIds.slice(i, i + 30))
+          .get();
+        for (const d of uppdragSnap.docs) {
+          const u = d.data() as UppdragDoc;
+          if (!u.ledamot_id || !uppdragOverlappar(u, votering.datum, votering.datum)) continue;
+          const text = franvaroEtikett(u);
+          if (!text) continue;
+          const nuvarande = narvaroStatus.get(u.ledamot_id);
+          const prio = franvaroPrio(text);
+          if (!nuvarande || prio < nuvarande.prio) narvaroStatus.set(u.ledamot_id, { text, prio });
+        }
+      }
+    }
+
     return {
       votering: {
         ...votering,
@@ -790,6 +885,7 @@ export const getVotering = createServerFn({ method: "GET" })
         parti: r.parti,
         valkrets: r.valkrets,
         rost: r.rost,
+        narvaro_etikett: narvaroStatus.get(r.ledamot_id)?.text ?? null,
         ledamoter: namn.get(r.ledamot_id) ?? null,
       })),
     };

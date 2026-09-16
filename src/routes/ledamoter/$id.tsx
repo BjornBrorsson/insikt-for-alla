@@ -49,14 +49,22 @@ function LedamotProfil() {
         <Tomt
           rubrik="Ledamoten hittades inte"
           text={`Ingen riksdagsledamot med id ”${id}” finns i databasen.`}
-          barn={<Link to="/ledamoter" className="text-sm underline">Tillbaka till ledamotslistan</Link>}
+          barn={
+            <Link to="/ledamoter" className="text-sm underline">
+              Tillbaka till ledamotslistan
+            </Link>
+          }
         />
       </div>
     );
   }
 
-  const { ledamot, uppdrag, roster, sammanfattning } = query.data;
+  const { ledamot, uppdrag, roster, sammanfattning, franvaroKontext } = query.data;
   const namn = ledamotsnamn(ledamot);
+
+  const totalt =
+    sammanfattning.ja + sammanfattning.nej + sammanfattning.avstar + sammanfattning.franvarande;
+  const hogFranvaro = totalt >= 10 && sammanfattning.franvarande / totalt >= 0.1;
 
   const harMajoritetsJamforelse = sammanfattning.jamforbara > 0;
   const majoritetsProcent = harMajoritetsJamforelse
@@ -149,7 +157,10 @@ function LedamotProfil() {
               ) : (
                 <ul className="mt-3 space-y-3 text-xs">
                   {uppdrag.map((u, i) => (
-                    <li key={i} className="border-b border-border/60 pb-2.5 last:border-0 last:pb-0">
+                    <li
+                      key={i}
+                      className="border-b border-border/60 pb-2.5 last:border-0 last:pb-0"
+                    >
                       <p className="font-medium text-foreground">
                         {u.roll ?? "Ledamot"} {u.organ_kod ? `(${u.organ_kod})` : ""}
                       </p>
@@ -186,15 +197,38 @@ function LedamotProfil() {
                 />
               </div>
 
+              {hogFranvaro && franvaroKontext.length > 0 ? (
+                <div className="mt-5 rounded-lg border border-border/80 bg-muted/30 p-4">
+                  <h3 className="text-sm font-medium text-foreground">
+                    Möjliga förklaringar till frånvaron
+                  </h3>
+                  <ul className="mt-2 space-y-1.5 text-xs">
+                    {franvaroKontext.map((k, i) => (
+                      <li key={i} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
+                        <span className="text-foreground">{k.text}</span>
+                        {k.fran ? (
+                          <span className="text-muted-foreground">
+                            {datumKort(k.fran)} – {k.till ? datumKort(k.till) : "pågående"}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                    Källa: Riksdagens uppdragsregister. Orsaken till statusen ”Ledig” specificeras
+                    inte (kan t.ex. vara föräldraledighet eller sjukdom). Kvittning mellan partier
+                    registreras inte i riksdagens öppna data.
+                  </p>
+                </div>
+              ) : null}
+
               {/* Likhet med partimajoriteten */}
               <div className="mt-8 border-t border-border pt-6">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <h3 className="font-medium text-foreground">
                     Röstade som partiets majoritetsröst
                   </h3>
-                  <span className="text-2xl font-normal text-foreground">
-                    {majoritetsProcent}
-                  </span>
+                  <span className="text-2xl font-normal text-foreground">{majoritetsProcent}</span>
                 </div>
 
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -204,9 +238,10 @@ function LedamotProfil() {
                 </p>
 
                 <EgenBerakning>
-                  Beräknas enbart när ledamoten avgett en aktiv röst (Ja, Nej eller Avstår) och partiet
-                  hade en entydig majoritetsröst. Frånvaro exkluderas och får aldrig beskrivas som ett
-                  mått på arbetsinsats (ledamoten kan vara kvittad enligt riksdagens överenskommelser).
+                  Beräknas enbart när ledamoten avgett en aktiv röst (Ja, Nej eller Avstår) och
+                  partiet hade en entydig majoritetsröst. Frånvaro exkluderas och får aldrig
+                  beskrivas som ett mått på arbetsinsats (ledamoten kan vara kvittad enligt
+                  riksdagens överenskommelser).
                 </EgenBerakning>
               </div>
             </section>
@@ -238,7 +273,8 @@ function LedamotProfil() {
                     >
                       <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted-foreground">
                         <span>
-                          {r.voteringar?.beteckning ?? "Beteckning saknas"} · punkt {r.voteringar?.punkt ?? "–"} · {datum(r.voteringar?.datum)}
+                          {r.voteringar?.beteckning ?? "Beteckning saknas"} · punkt{" "}
+                          {r.voteringar?.punkt ?? "–"} · {datum(r.voteringar?.datum)}
                         </span>
                         <RostMarke rost={r.rost} />
                       </div>

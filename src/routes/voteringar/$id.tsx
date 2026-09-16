@@ -417,6 +417,14 @@ function VoteringDetalj() {
                       </td>
                       <td className="px-4 py-2">
                         <RostMarke rost={r.rost} />
+                        {r.rost === "Frånvarande" && r.narvaro_etikett ? (
+                          <span
+                            className="mt-0.5 block text-[11px] text-muted-foreground"
+                            title="Tjänstgöringsstatus i riksdagens uppdragsregister vid voteringstillfället. Orsaken till ”Ledig” specificeras inte; kvittning syns inte i öppna data."
+                          >
+                            {r.narvaro_etikett}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2 text-right text-xs">
                         {arAvvikare ? (
