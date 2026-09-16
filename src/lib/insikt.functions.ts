@@ -1,30 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { DocumentData, Query } from "firebase-admin/firestore";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { requireFirebaseAuth } from "@/integrations/firebase/auth";
 
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { Database } from "@/integrations/supabase/types";
-
-type SupabaseKlient = SupabaseClient<Database>;
-
-import { publicDb } from "./db.server";
-
-/**
- * Databasfunktionerna har valfria argument. Tomma värden utesluts helt
- * istället för att skickas som null, vilket typerna inte tillåter.
- */
-function period(
-  fran?: string | null,
-  till?: string | null,
-  sakfraga?: string | null,
-): { _fran?: string; _till?: string; _sakfraga?: string } {
-  return {
-    ...(fran ? { _fran: fran } : {}),
-    ...(till ? { _till: till } : {}),
-    ...(sakfraga ? { _sakfraga: sakfraga } : {}),
-  };
-}
+import { fsAntal, fsDb, fsHämta, fsNyRad, fsUppdatera } from "./fs-db.server";
 
 /* ------------------------------------------------------------------ */
 /* Typer                                                              */
@@ -70,36 +50,122 @@ export type Votering = {
   kalla_url: string | null;
 };
 
-const LEDAMOT_KOLUMNER =
-  "id, fornamn, efternamn, parti, valkrets, status, fodd_ar, kon, bild_url, bild_url_liten, kalla_url";
-const VOTERING_KOLUMNER =
-  "id, arende_id, rm, beteckning, punkt, rubrik, gallde, avser, ja, nej, avstar, franvarande, vinnare, datum, kalla_url";
+type ArendeDoc = {
+  id: string;
+  rm: string | null;
+  beteckning: string | null;
+  organ: string | null;
+  doktyp: string | null;
+  titel: string | null;
+  undertitel: string | null;
+  datum: string | null;
+  publicerad: string | null;
+  kalla_url_html: string | null;
+  kalla_url_text: string | null;
+  uppdaterad: string;
+  sakfragor?: string[];
+  sakfragor_kalla?: Record<string, string>;
+};
+
+type VoteringDoc = Votering & {
+  beslutspunkt_id: string | null;
+  typ: string | null;
+  uppdaterad: string;
+  organ: string | null;
+  arende_titel: string | null;
+  sakfragor: string[];
+};
+
+type RostDoc = {
+  votering_id: string;
+  ledamot_id: string;
+  parti: string | null;
+  valkrets: string | null;
+  rost: string;
+  avser: string | null;
+  datum: string | null;
+  arende_id: string | null;
+  titel: string | null;
+  rubrik: string | null;
+  beteckning: string | null;
+  punkt: string | null;
+  sakfragor: string[];
+  partimajoritet: string | null;
+};
+
+type PartitotalDoc = {
+  votering_id: string;
+  parti: string;
+  ja: number;
+  nej: number;
+  avstar: number;
+  franvarande: number;
+  majoritetsrost: string | null;
+  enligt: number;
+  datum: string | null;
+  rm: string | null;
+  arende_id: string | null;
+  titel: string | null;
+  rubrik: string | null;
+  beteckning: string | null;
+  punkt: string | null;
+  sakfragor: string[];
+};
+
+/** En post i rostmatriser/{ledamot_id} eller partimajoriteter/{parti}. */
+type MatrisPost = {
+  rost?: string;
+  majoritet: string | null;
+  datum: string | null;
+  sakfragor: string[];
+  titel: string | null;
+  beteckning: string | null;
+  punkt: string | null;
+};
+
+const GILTIGA_ROSTER = new Set(["Ja", "Nej", "Avstår"]);
+const TJANSTGORANDE = "Tjänstgörande riksdagsledamot";
+
+function iPeriod(datum: string | null | undefined, fran?: string | null, till?: string | null) {
+  if (fran && (!datum || datum < fran)) return false;
+  if (till && (!datum || datum > till)) return false;
+  return true;
+}
+
+function harSakfraga(sakfragor: string[] | undefined, sakfraga?: string | null) {
+  return !sakfraga || (sakfragor ?? []).includes(sakfraga);
+}
+
+function textSok(q: string, ...falt: (string | null | undefined)[]) {
+  const s = q.toLowerCase();
+  return falt.some((f) => f?.toLowerCase().includes(s));
+}
 
 /* ------------------------------------------------------------------ */
 /* Datastatus – vad täcker Insikt just nu?                            */
 /* ------------------------------------------------------------------ */
 
 export const getDatastatus = createServerFn({ method: "GET" }).handler(async () => {
-  const db = publicDb();
+  const db = await fsDb();
   const [ledamoter, arenden, voteringar, roster, senast, aldst, senastUppdaterad] =
     await Promise.all([
-      db.from("ledamoter").select("id", { count: "exact", head: true }),
-      db.from("arenden").select("id", { count: "exact", head: true }),
-      db.from("voteringar").select("id", { count: "exact", head: true }),
-      db.from("roster").select("votering_id", { count: "exact", head: true }),
-      db.from("voteringar").select("datum").not("datum", "is", null).order("datum", { ascending: false }).limit(1),
-      db.from("voteringar").select("datum").not("datum", "is", null).order("datum", { ascending: true }).limit(1),
-      db.from("voteringar").select("uppdaterad").order("uppdaterad", { ascending: false }).limit(1),
+      fsAntal("ledamoter"),
+      fsAntal("arenden"),
+      fsAntal("voteringar"),
+      fsAntal("roster"),
+      db.collection("voteringar").orderBy("datum", "desc").limit(1).get(),
+      db.collection("voteringar").orderBy("datum", "asc").limit(1).get(),
+      db.collection("voteringar").orderBy("uppdaterad", "desc").limit(1).get(),
     ]);
 
   return {
-    ledamoter: ledamoter.count ?? 0,
-    arenden: arenden.count ?? 0,
-    voteringar: voteringar.count ?? 0,
-    roster: roster.count ?? 0,
-    senasteVotering: senast.data?.[0]?.datum ?? null,
-    aldstaVotering: aldst.data?.[0]?.datum ?? null,
-    senastUppdaterad: senastUppdaterad.data?.[0]?.uppdaterad ?? null,
+    ledamoter,
+    arenden,
+    voteringar,
+    roster,
+    senasteVotering: (senast.docs[0]?.data()["datum"] as string | null) ?? null,
+    aldstaVotering: (aldst.docs[0]?.data()["datum"] as string | null) ?? null,
+    senastUppdaterad: (senastUppdaterad.docs[0]?.data()["uppdaterad"] as string | null) ?? null,
   };
 });
 
@@ -108,29 +174,48 @@ export const getDatastatus = createServerFn({ method: "GET" }).handler(async () 
 /* ------------------------------------------------------------------ */
 
 export const getStartsida = createServerFn({ method: "GET" }).handler(async () => {
-  const db = publicDb();
+  const db = await fsDb();
   const [voteringar, partier, sakfragor, valkretsar] = await Promise.all([
-    db
-      .from("voteringar")
-      .select(`${VOTERING_KOLUMNER}, arenden(id, titel, organ, rm)`)
-      .not("datum", "is", null)
-      .order("datum", { ascending: false })
-      .limit(8),
-    db.from("partier").select("*").order("ordning"),
-    db.from("sakfragor").select("slug, namn, beskrivning").order("ordning"),
-    db.from("ledamoter").select("valkrets").eq("status", "Tjänstgörande riksdagsledamot"),
+    db.collection("voteringar").orderBy("datum", "desc").limit(8).get(),
+    db.collection("partier").orderBy("ordning").get(),
+    db.collection("sakfragor").orderBy("ordning").get(),
+    db.collection("ledamoter").where("status", "==", TJANSTGORANDE).get(),
   ]);
 
   const valkretsNamn = [
-    ...new Set((valkretsar.data ?? []).map((r) => r.valkrets).filter((v): v is string => !!v)),
+    ...new Set(
+      valkretsar.docs
+        .map((d) => d.data()["valkrets"] as string | null)
+        .filter((v): v is string => !!v),
+    ),
   ].sort((a, b) => a.localeCompare(b, "sv"));
 
+  const senasteVoteringar = voteringar.docs
+    .map((d) => {
+      const v = d.data() as VoteringDoc;
+      if (!v.datum) return null;
+      return {
+        ...v,
+        arenden: v.arende_id
+          ? { id: v.arende_id, titel: v.arende_titel ?? null, organ: v.organ ?? null, rm: v.rm }
+          : null,
+      };
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null);
+
   return {
-    senasteVoteringar: (voteringar.data ?? []) as unknown as (Votering & {
+    senasteVoteringar: senasteVoteringar as (Votering & {
       arenden: { id: string; titel: string | null; organ: string | null; rm: string | null } | null;
     })[],
-    partier: (partier.data ?? []) as Parti[],
-    sakfragor: (sakfragor.data ?? []) as { slug: string; namn: string; beskrivning: string | null }[],
+    partier: partier.docs.map((d) => d.data() as Parti),
+    sakfragor: sakfragor.docs.map((d) => {
+      const s = d.data();
+      return {
+        slug: s["slug"] as string,
+        namn: s["namn"] as string,
+        beskrivning: (s["beskrivning"] as string | null) ?? null,
+      };
+    }),
     valkretsar: valkretsNamn,
   };
 });
@@ -153,58 +238,64 @@ export const listLedamoter = createServerFn({ method: "GET" })
       .parse(input ?? {}),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
+    const db = await fsDb();
+    // En equality i Firestore (parti eller valkrets), resten i minnet –
+    // undviker sammansatta index och matchar gamla ilike-sökningen.
+    let fraga: Query<DocumentData> = db.collection("ledamoter");
+    if (data.parti) fraga = fraga.where("parti", "==", data.parti);
+    else if (data.valkrets) fraga = fraga.where("valkrets", "==", data.valkrets);
+    else if (data.tjanstgoring === "aktuella") fraga = fraga.where("status", "==", TJANSTGORANDE);
 
-    let ledamotIds: string[] | null = null;
-    if (data.utskott) {
-      const { data: uppdrag } = await db
-        .from("uppdrag")
-        .select("ledamot_id")
-        .eq("organ_kod", data.utskott)
-        .limit(5000);
-      ledamotIds = [...new Set((uppdrag ?? []).map((u) => u.ledamot_id))];
-      if (ledamotIds.length === 0) return { ledamoter: [], totalt: 0 };
-    }
+    const snap = await fraga.get();
+    let rader = snap.docs.map(
+      (d) =>
+        ({ id: d.id, ...d.data() }) as Ledamot & {
+          sorteringsnamn?: string | null;
+          utskott?: string[];
+        },
+    );
 
-    let fraga = db.from("ledamoter").select(LEDAMOT_KOLUMNER, { count: "exact" });
-    if (data.parti) fraga = fraga.eq("parti", data.parti);
-    if (data.valkrets) fraga = fraga.eq("valkrets", data.valkrets);
-    if (data.tjanstgoring === "aktuella") fraga = fraga.eq("status", "Tjänstgörande riksdagsledamot");
-    if (data.tjanstgoring === "historiska")
-      fraga = fraga.neq("status", "Tjänstgörande riksdagsledamot");
+    if (data.parti && data.valkrets) rader = rader.filter((l) => l.valkrets === data.valkrets);
+    if (data.tjanstgoring === "aktuella" && (data.parti || data.valkrets))
+      rader = rader.filter((l) => l.status === TJANSTGORANDE);
+    if (data.tjanstgoring === "historiska") rader = rader.filter((l) => l.status !== TJANSTGORANDE);
+    if (data.utskott) rader = rader.filter((l) => (l.utskott ?? []).includes(data.utskott));
     if (data.q) {
       const q = data.q.replace(/[%,]/g, " ").trim();
-      fraga = fraga.or(
-        `fornamn.ilike.%${q}%,efternamn.ilike.%${q}%,sorteringsnamn.ilike.%${q}%`,
-      );
+      rader = rader.filter((l) => textSok(q, l.fornamn, l.efternamn, l.sorteringsnamn));
     }
-    if (ledamotIds) fraga = fraga.in("id", ledamotIds);
 
-    fraga =
+    rader.sort((a, b) =>
       data.sortering === "parti"
-        ? fraga.order("parti").order("efternamn")
-        : fraga.order("efternamn").order("fornamn");
+        ? (a.parti ?? "").localeCompare(b.parti ?? "", "sv") ||
+          a.efternamn.localeCompare(b.efternamn, "sv")
+        : a.efternamn.localeCompare(b.efternamn, "sv") || a.fornamn.localeCompare(b.fornamn, "sv"),
+    );
 
-    const { data: rader, count, error } = await fraga.limit(400);
-    if (error) throw new Error(error.message);
-    return { ledamoter: (rader ?? []) as unknown as Ledamot[], totalt: count ?? 0 };
+    return { ledamoter: rader.slice(0, 400), totalt: rader.length };
   });
 
 export const getFilterval = createServerFn({ method: "GET" }).handler(async () => {
-  const db = publicDb();
-  const [partier, valkretsar, utskott] = await Promise.all([
-    db.from("partier").select("*").order("ordning"),
-    db.from("ledamoter").select("valkrets").not("valkrets", "is", null).limit(5000),
-    db.from("uppdrag").select("organ_kod, typ").eq("typ", "uppdrag").limit(20000),
+  const db = await fsDb();
+  const [partier, ledamoter, uppdrag] = await Promise.all([
+    db.collection("partier").orderBy("ordning").get(),
+    db.collection("ledamoter").get(),
+    db.collection("uppdrag").where("typ", "==", "uppdrag").get(),
   ]);
   return {
-    partier: (partier.data ?? []) as Parti[],
+    partier: partier.docs.map((d) => d.data() as Parti),
     valkretsar: [
-      ...new Set((valkretsar.data ?? []).map((v) => v.valkrets).filter((v): v is string => !!v)),
+      ...new Set(
+        ledamoter.docs
+          .map((d) => d.data()["valkrets"] as string | null)
+          .filter((v): v is string => !!v),
+      ),
     ].sort((a, b) => a.localeCompare(b, "sv")),
     utskott: [
       ...new Set(
-        (utskott.data ?? []).map((u) => u.organ_kod).filter((v): v is string => !!v && v.length <= 6),
+        uppdrag.docs
+          .map((d) => d.data()["organ_kod"] as string | null)
+          .filter((v): v is string => !!v && v.length <= 6),
       ),
     ].sort(),
   };
@@ -212,87 +303,80 @@ export const getFilterval = createServerFn({ method: "GET" }).handler(async () =
 
 export const getLedamot = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) =>
-    z.object({ id: z.string(), fran: z.string().default(""), till: z.string().default("") }).parse(input),
+    z
+      .object({ id: z.string(), fran: z.string().default(""), till: z.string().default("") })
+      .parse(input),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const { data: ledamot } = await db
-      .from("ledamoter")
-      .select(LEDAMOT_KOLUMNER)
-      .eq("id", data.id)
-      .maybeSingle();
+    const db = await fsDb();
+    const ledamot = await fsHämta<Ledamot>("ledamoter", data.id);
     if (!ledamot) return null;
 
     const fran = data.fran || null;
     const till = data.till || null;
 
-    const [uppdrag, roster, sammanfattning] = await Promise.all([
-      db
-        .from("uppdrag")
-        .select("organ_kod, roll, typ, status, fran, till")
-        .eq("ledamot_id", data.id)
-        .order("fran", { ascending: false }),
-      db
-        .from("roster")
-        .select("rost, parti, voteringar(id, rubrik, beteckning, punkt, datum, gallde, arende_id, arenden(titel))")
-        .eq("ledamot_id", data.id)
-        .limit(300),
-      db.rpc("ledamot_sammanfattning", {
-        _ledamot: data.id,
-        ...period(fran, till),
-      }),
+    const [uppdragSnap, rosterSnap, matris] = await Promise.all([
+      db.collection("uppdrag").where("ledamot_id", "==", data.id).get(),
+      db.collection("roster").where("ledamot_id", "==", data.id).get(),
+      fsHämta<{ poster: Record<string, MatrisPost> }>("rostmatriser", data.id),
     ]);
 
-    type RostRad = {
-      rost: string;
-      parti: string | null;
-      voteringar: {
-        id: string;
-        rubrik: string | null;
-        beteckning: string | null;
-        punkt: string | null;
-        datum: string | null;
-        gallde: string | null;
-        arende_id: string | null;
-        arenden: { titel: string | null } | null;
-      } | null;
+    const uppdrag = uppdragSnap.docs
+      .map(
+        (d) =>
+          d.data() as {
+            organ_kod: string | null;
+            roll: string | null;
+            typ: string | null;
+            status: string | null;
+            fran: string | null;
+            till: string | null;
+          },
+      )
+      .sort((a, b) => (b.fran ?? "").localeCompare(a.fran ?? ""));
+
+    const rostRader = rosterSnap.docs
+      .map((d) => d.data() as RostDoc)
+      .sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? ""))
+      .slice(0, 300)
+      .map((r) => ({
+        rost: r.rost,
+        parti: r.parti,
+        voteringar: {
+          id: r.votering_id,
+          rubrik: r.rubrik ?? null,
+          beteckning: r.beteckning ?? null,
+          punkt: r.punkt ?? null,
+          datum: r.datum ?? null,
+          gallde: null as string | null,
+          arende_id: r.arende_id ?? null,
+          arenden: r.titel ? { titel: r.titel } : null,
+        },
+      }));
+
+    // ledamot_sammanfattning: räkna per röst + jämför giltiga röster mot partimajoriteten.
+    const s = {
+      ja: 0,
+      nej: 0,
+      avstar: 0,
+      franvarande: 0,
+      jamforbara: 0,
+      lika_med_partimajoritet: 0,
     };
+    for (const p of Object.values(matris?.poster ?? {})) {
+      if (!iPeriod(p.datum, fran, till)) continue;
+      const rost = p.rost ?? "";
+      if (rost === "Ja") s.ja += 1;
+      else if (rost === "Nej") s.nej += 1;
+      else if (rost === "Avstår") s.avstar += 1;
+      else if (rost === "Frånvarande") s.franvarande += 1;
+      if (GILTIGA_ROSTER.has(rost) && p.majoritet) {
+        s.jamforbara += 1;
+        if (rost === p.majoritet) s.lika_med_partimajoritet += 1;
+      }
+    }
 
-    const rostRader = ((roster.data ?? []) as unknown as RostRad[])
-      .filter((r) => r.voteringar)
-      .sort((a, b) => (b.voteringar!.datum ?? "").localeCompare(a.voteringar!.datum ?? ""));
-
-    const s = (sammanfattning.data ?? [])[0] as
-      | {
-          ja: number;
-          nej: number;
-          avstar: number;
-          franvarande: number;
-          jamforbara: number;
-          lika_med_partimajoritet: number;
-        }
-      | undefined;
-
-    return {
-      ledamot: ledamot as unknown as Ledamot,
-      uppdrag: (uppdrag.data ?? []) as {
-        organ_kod: string | null;
-        roll: string | null;
-        typ: string | null;
-        status: string | null;
-        fran: string | null;
-        till: string | null;
-      }[],
-      roster: rostRader,
-      sammanfattning: s ?? {
-        ja: 0,
-        nej: 0,
-        avstar: 0,
-        franvarande: 0,
-        jamforbara: 0,
-        lika_med_partimajoritet: 0,
-      },
-    };
+    return { ledamot, uppdrag, roster: rostRader, sammanfattning: s };
   });
 
 /* ------------------------------------------------------------------ */
@@ -300,55 +384,53 @@ export const getLedamot = createServerFn({ method: "GET" })
 /* ------------------------------------------------------------------ */
 
 export const listPartier = createServerFn({ method: "GET" }).handler(async () => {
-  const db = publicDb();
+  const db = await fsDb();
   const [partier, ledamoter] = await Promise.all([
-    db.from("partier").select("*").order("ordning"),
-    db
-      .from("ledamoter")
-      .select("parti, status")
-      .eq("status", "Tjänstgörande riksdagsledamot")
-      .limit(5000),
+    db.collection("partier").orderBy("ordning").get(),
+    db.collection("ledamoter").where("status", "==", TJANSTGORANDE).get(),
   ]);
   const mandat = new Map<string, number>();
-  for (const l of ledamoter.data ?? []) {
-    if (l.parti) mandat.set(l.parti, (mandat.get(l.parti) ?? 0) + 1);
+  for (const d of ledamoter.docs) {
+    const p = d.data()["parti"] as string | null;
+    if (p) mandat.set(p, (mandat.get(p) ?? 0) + 1);
   }
-  return (partier.data ?? []).map((p) => ({
-    ...(p as Parti),
-    tjanstgorande: mandat.get((p as Parti).kod) ?? 0,
-  }));
+  return partier.docs.map((d) => {
+    const p = d.data() as Parti;
+    return { ...p, tjanstgorande: mandat.get(p.kod) ?? 0 };
+  });
 });
 
 export const getParti = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) =>
-    z.object({ kod: z.string(), fran: z.string().default(""), till: z.string().default("") }).parse(input),
+    z
+      .object({ kod: z.string(), fran: z.string().default(""), till: z.string().default("") })
+      .parse(input),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
+    const db = await fsDb();
+    const parti = await fsHämta<Parti>("partier", data.kod);
+    if (!parti) return null;
+
     const fran = data.fran || null;
     const till = data.till || null;
 
-    const [parti, ledamoter, sammanhallning, likhet, voteringar] = await Promise.all([
-      db.from("partier").select("*").eq("kod", data.kod).maybeSingle(),
+    const [ledamoterSnap, totalerSnap, majoriteterSnap] = await Promise.all([
       db
-        .from("ledamoter")
-        .select(LEDAMOT_KOLUMNER)
-        .eq("parti", data.kod)
-        .eq("status", "Tjänstgörande riksdagsledamot")
-        .order("efternamn")
-        .limit(500),
-      db.rpc("parti_sammanhallning", { _parti: data.kod, ...period(fran, till) }),
-      db.rpc("parti_likhet", { _parti: data.kod, ...period(fran, till) }),
-      db
-        .from("partitotaler")
-        .select("ja, nej, avstar, franvarande, voteringar(id, rubrik, beteckning, punkt, datum, gallde, arenden(titel))")
-        .eq("parti", data.kod)
-        .limit(200),
+        .collection("ledamoter")
+        .where("parti", "==", data.kod)
+        .where("status", "==", TJANSTGORANDE)
+        .get(),
+      db.collection("partitotaler").where("parti", "==", data.kod).get(),
+      db.collection("partimajoriteter").get(),
     ]);
 
-    if (!parti.data) return null;
+    const ledamoter = ledamoterSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as Ledamot)
+      .sort((a, b) => a.efternamn.localeCompare(b.efternamn, "sv"));
 
-    type PartiVotering = {
+    // parti_sammanhallning: bara voteringar där partiet har en majoritetsröst.
+    const sh = { voteringar: 0, avgivna_roster: 0, enligt_majoritet: 0 };
+    const voteringRader: {
       ja: number;
       nej: number;
       avstar: number;
@@ -361,23 +443,65 @@ export const getParti = createServerFn({ method: "GET" })
         datum: string | null;
         gallde: string | null;
         arenden: { titel: string | null } | null;
-      } | null;
-    };
+      };
+    }[] = [];
 
-    const voteringRader = ((voteringar.data ?? []) as unknown as PartiVotering[])
-      .filter((v) => v.voteringar)
-      .sort((a, b) => (b.voteringar!.datum ?? "").localeCompare(a.voteringar!.datum ?? ""));
+    for (const d of totalerSnap.docs) {
+      const t = d.data() as PartitotalDoc;
+      if (iPeriod(t.datum, fran, till) && t.majoritetsrost) {
+        sh.voteringar += 1;
+        sh.avgivna_roster += t.ja + t.nej + t.avstar;
+        sh.enligt_majoritet += t.enligt ?? 0;
+      }
+      voteringRader.push({
+        ja: t.ja,
+        nej: t.nej,
+        avstar: t.avstar,
+        franvarande: t.franvarande,
+        voteringar: {
+          id: t.votering_id,
+          rubrik: t.rubrik ?? null,
+          beteckning: t.beteckning ?? null,
+          punkt: t.punkt ?? null,
+          datum: t.datum ?? null,
+          gallde: null,
+          arenden: t.titel ? { titel: t.titel } : null,
+        },
+      });
+    }
+
+    voteringRader.sort((a, b) =>
+      (b.voteringar.datum ?? "").localeCompare(a.voteringar.datum ?? ""),
+    );
+
+    // parti_likhet: gemensamma voteringar där båda partierna har en majoritetsröst.
+    const egna =
+      (
+        majoriteterSnap.docs.find((d) => d.id === data.kod)?.data() as
+          { poster: Record<string, MatrisPost> } | undefined
+      )?.poster ?? {};
+    const likhet: { parti: string; gemensamma: number; lika: number }[] = [];
+    for (const d of majoriteterSnap.docs) {
+      if (d.id === data.kod) continue;
+      const poster = (d.data() as { poster: Record<string, MatrisPost> }).poster ?? {};
+      let gemensamma = 0;
+      let lika = 0;
+      for (const [vid, egen] of Object.entries(egna)) {
+        const annan = poster[vid];
+        if (!egen.majoritet || !annan?.majoritet || !iPeriod(egen.datum, fran, till)) continue;
+        gemensamma += 1;
+        if (egen.majoritet === annan.majoritet) lika += 1;
+      }
+      if (gemensamma > 0) likhet.push({ parti: d.id, gemensamma, lika });
+    }
+    likhet.sort((a, b) => b.lika - a.lika);
 
     return {
-      parti: parti.data as Parti,
-      ledamoter: (ledamoter.data ?? []) as unknown as Ledamot[],
-      sammanhallning: ((sammanhallning.data ?? []) as {
-        voteringar: number;
-        avgivna_roster: number;
-        enligt_majoritet: number;
-      }[])[0] ?? { voteringar: 0, avgivna_roster: 0, enligt_majoritet: 0 },
-      likhet: (likhet.data ?? []) as { parti: string; gemensamma: number; lika: number }[],
-      voteringar: voteringRader,
+      parti,
+      ledamoter,
+      sammanhallning: sh,
+      likhet,
+      voteringar: voteringRader.slice(0, 200),
     };
   });
 
@@ -386,15 +510,12 @@ export const getParti = createServerFn({ method: "GET" })
 /* ------------------------------------------------------------------ */
 
 export const listValkretsar = createServerFn({ method: "GET" }).handler(async () => {
-  const db = publicDb();
-  const { data } = await db
-    .from("ledamoter")
-    .select("valkrets, parti")
-    .eq("status", "Tjänstgörande riksdagsledamot")
-    .limit(5000);
+  const db = await fsDb();
+  const snap = await db.collection("ledamoter").where("status", "==", TJANSTGORANDE).get();
   const karta = new Map<string, number>();
-  for (const r of data ?? []) {
-    if (r.valkrets) karta.set(r.valkrets, (karta.get(r.valkrets) ?? 0) + 1);
+  for (const d of snap.docs) {
+    const v = d.data()["valkrets"] as string | null;
+    if (v) karta.set(v, (karta.get(v) ?? 0) + 1);
   }
   return [...karta.entries()]
     .map(([valkrets, ledamoter]) => ({ valkrets, ledamoter }))
@@ -404,15 +525,15 @@ export const listValkretsar = createServerFn({ method: "GET" }).handler(async ()
 export const getValkrets = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ namn: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const { data: ledamoter } = await db
-      .from("ledamoter")
-      .select(LEDAMOT_KOLUMNER)
-      .eq("valkrets", data.namn)
-      .eq("status", "Tjänstgörande riksdagsledamot")
-      .order("efternamn")
-      .limit(200);
-    const rader = (ledamoter ?? []) as unknown as Ledamot[];
+    const db = await fsDb();
+    const snap = await db
+      .collection("ledamoter")
+      .where("valkrets", "==", data.namn)
+      .where("status", "==", TJANSTGORANDE)
+      .get();
+    const rader = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as Ledamot)
+      .sort((a, b) => a.efternamn.localeCompare(b.efternamn, "sv"));
     const fordelning = new Map<string, number>();
     for (const l of rader) if (l.parti) fordelning.set(l.parti, (fordelning.get(l.parti) ?? 0) + 1);
     return {
@@ -443,131 +564,167 @@ export const listVoteringar = createServerFn({ method: "GET" })
       .parse(input ?? {}),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
+    const db = await fsDb();
     const perSida = 25;
 
-    let arendeIds: string[] | null = null;
-    if (data.sakfraga) {
-      const { data: kopplingar } = await db
-        .from("arende_sakfragor")
-        .select("arende_id")
-        .eq("sakfraga", data.sakfraga)
-        .limit(5000);
-      arendeIds = (kopplingar ?? []).map((k) => k.arende_id);
-      if (arendeIds.length === 0) return { voteringar: [], totalt: 0, perSida };
-    }
-    if (data.organ) {
-      const { data: arenden } = await db
-        .from("arenden")
-        .select("id")
-        .eq("organ", data.organ)
-        .limit(5000);
-      const ids = (arenden ?? []).map((a) => a.id);
-      arendeIds = arendeIds ? arendeIds.filter((id) => ids.includes(id)) : ids;
-      if (arendeIds.length === 0) return { voteringar: [], totalt: 0, perSida };
-    }
+    // Mest avgränsande filtret i Firestore, resten i minnet.
+    let fraga: Query<DocumentData> = db.collection("voteringar");
+    if (data.sakfraga) fraga = fraga.where("sakfragor", "array-contains", data.sakfraga);
+    else if (data.organ) fraga = fraga.where("organ", "==", data.organ);
+    else if (data.rm) fraga = fraga.where("rm", "==", data.rm);
 
-    let fraga = db
-      .from("voteringar")
-      .select(`${VOTERING_KOLUMNER}, arenden(id, titel, organ, rm)`, { count: "exact" });
-    if (data.rm) fraga = fraga.eq("rm", data.rm);
-    if (data.fran) fraga = fraga.gte("datum", data.fran);
-    if (data.till) fraga = fraga.lte("datum", data.till);
-    if (arendeIds) fraga = fraga.in("arende_id", arendeIds);
+    const snap = await fraga.get();
+    let rader = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc);
+
+    if (data.rm) rader = rader.filter((v) => v.rm === data.rm);
+    if (data.organ) rader = rader.filter((v) => v.organ === data.organ);
+    if (data.sakfraga) rader = rader.filter((v) => (v.sakfragor ?? []).includes(data.sakfraga));
+    rader = rader.filter((v) => iPeriod(v.datum, data.fran || null, data.till || null));
     if (data.q) {
       const q = data.q.replace(/[%,]/g, " ").trim();
-      fraga = fraga.or(`rubrik.ilike.%${q}%,beteckning.ilike.%${q}%,gallde.ilike.%${q}%`);
+      rader = rader.filter((v) => textSok(q, v.rubrik, v.beteckning, v.gallde));
     }
 
-    const fran = (data.sida - 1) * perSida;
-    const { data: rader, count, error } = await fraga
-      .order("datum", { ascending: false, nullsFirst: false })
-      .range(fran, fran + perSida - 1);
-    if (error) throw new Error(error.message);
+    rader.sort((a, b) => {
+      if (a.datum && b.datum) return b.datum.localeCompare(a.datum);
+      if (a.datum) return -1;
+      if (b.datum) return 1;
+      return 0;
+    });
+
+    const totalt = rader.length;
+    const sida = rader.slice((data.sida - 1) * perSida, data.sida * perSida).map((v) => ({
+      ...v,
+      arenden: v.arende_id
+        ? { id: v.arende_id, titel: v.arende_titel ?? null, organ: v.organ ?? null, rm: v.rm }
+        : null,
+    }));
 
     return {
-      voteringar: (rader ?? []) as unknown as (Votering & {
-        arenden: { id: string; titel: string | null; organ: string | null; rm: string | null } | null;
+      voteringar: sida as (Votering & {
+        arenden: {
+          id: string;
+          titel: string | null;
+          organ: string | null;
+          rm: string | null;
+        } | null;
       })[],
-      totalt: count ?? 0,
+      totalt,
       perSida,
     };
   });
 
 export const getVoteringsfilter = createServerFn({ method: "GET" }).handler(async () => {
-  const db = publicDb();
-  const [rm, organ, sakfragor] = await Promise.all([
-    db.from("voteringar").select("rm").limit(5000),
-    db.from("arenden").select("organ").limit(5000),
-    db.from("sakfragor").select("slug, namn").order("ordning"),
+  const db = await fsDb();
+  const [voteringar, arenden, sakfragor] = await Promise.all([
+    db.collection("voteringar").get(),
+    db.collection("arenden").get(),
+    db.collection("sakfragor").orderBy("ordning").get(),
   ]);
   return {
-    riksmoten: [...new Set((rm.data ?? []).map((r) => r.rm).filter((v): v is string => !!v))].sort().reverse(),
-    utskott: [...new Set((organ.data ?? []).map((r) => r.organ).filter((v): v is string => !!v))].sort(),
-    sakfragor: (sakfragor.data ?? []) as { slug: string; namn: string }[],
+    riksmoten: [
+      ...new Set(
+        voteringar.docs.map((d) => d.data()["rm"] as string | null).filter((v): v is string => !!v),
+      ),
+    ]
+      .sort()
+      .reverse(),
+    utskott: [
+      ...new Set(
+        arenden.docs.map((d) => d.data()["organ"] as string | null).filter((v): v is string => !!v),
+      ),
+    ].sort(),
+    sakfragor: sakfragor.docs.map((d) => {
+      const s = d.data();
+      return { slug: s["slug"] as string, namn: s["namn"] as string };
+    }),
   };
 });
 
 export const getVotering = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ id: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const { data: votering } = await db
-      .from("voteringar")
-      .select(
-        `${VOTERING_KOLUMNER}, arenden(id, titel, organ, rm, datum, kalla_url_html), beslutspunkter(id, punkt, rubrik, forslag, beslutstyp, motforslag_nummer, motforslag_partier, vinnare, voteringskrav)`,
-      )
-      .eq("id", data.id)
-      .maybeSingle();
+    const db = await fsDb();
+    const votering = await fsHämta<VoteringDoc>("voteringar", data.id);
     if (!votering) return null;
 
-    const [partitotaler, majoritet, roster] = await Promise.all([
-      db.from("partitotaler").select("*").eq("votering_id", data.id),
-      db.from("v_partimajoritet").select("parti, majoritetsrost").eq("votering_id", data.id),
-      db
-        .from("roster")
-        .select("ledamot_id, parti, valkrets, rost, ledamoter:ledamot_id(fornamn, efternamn)")
-        .eq("votering_id", data.id)
-        .limit(400),
+    const [arende, beslutspunkt, partitotalerSnap, rosterSnap] = await Promise.all([
+      votering.arende_id ? fsHämta<ArendeDoc>("arenden", votering.arende_id) : null,
+      votering.beslutspunkt_id
+        ? fsHämta<{
+            punkt: string;
+            rubrik: string | null;
+            forslag: string | null;
+            beslutstyp: string | null;
+            motforslag_nummer: string | null;
+            motforslag_partier: string | null;
+            vinnare: string | null;
+            voteringskrav: string | null;
+          }>("beslutspunkter", votering.beslutspunkt_id)
+        : null,
+      db.collection("partitotaler").where("votering_id", "==", data.id).get(),
+      db.collection("roster").where("votering_id", "==", data.id).get(),
     ]);
 
+    // Hämta bara namn på de ledamöter som faktiskt finns i voteringen.
+    const rosterDocs = rosterSnap.docs.map((d) => d.data() as RostDoc);
+    const ledamotSnaps =
+      rosterDocs.length === 0
+        ? []
+        : await db.getAll(...rosterDocs.map((r) => db.collection("ledamoter").doc(r.ledamot_id)));
+    const namn = new Map(
+      ledamotSnaps
+        .filter((s) => s.exists)
+        .map((s) => {
+          const l = s.data()!;
+          return [s.id, { fornamn: l["fornamn"], efternamn: l["efternamn"] }] as const;
+        }),
+    );
+
+    const partitotaler = partitotalerSnap.docs.map((d) => d.data() as PartitotalDoc);
+
     return {
-      votering: votering as unknown as Votering & {
-        arenden: {
-          id: string;
-          titel: string | null;
-          organ: string | null;
-          rm: string | null;
-          datum: string | null;
-          kalla_url_html: string | null;
-        } | null;
-        beslutspunkter: {
-          id: string;
-          punkt: string;
-          rubrik: string | null;
-          forslag: string | null;
-          beslutstyp: string | null;
-          motforslag_nummer: string | null;
-          motforslag_partier: string | null;
-          vinnare: string | null;
-          voteringskrav: string | null;
-        } | null;
+      votering: {
+        ...votering,
+        arenden: arende
+          ? {
+              id: arende.id,
+              titel: arende.titel,
+              organ: arende.organ,
+              rm: arende.rm,
+              datum: arende.datum,
+              kalla_url_html: arende.kalla_url_html,
+            }
+          : null,
+        beslutspunkter: beslutspunkt
+          ? {
+              id: beslutspunkt.id,
+              punkt: beslutspunkt.punkt,
+              rubrik: beslutspunkt.rubrik,
+              forslag: beslutspunkt.forslag,
+              beslutstyp: beslutspunkt.beslutstyp,
+              motforslag_nummer: beslutspunkt.motforslag_nummer,
+              motforslag_partier: beslutspunkt.motforslag_partier,
+              vinnare: beslutspunkt.vinnare,
+              voteringskrav: beslutspunkt.voteringskrav,
+            }
+          : null,
       },
-      partitotaler: (partitotaler.data ?? []) as {
-        parti: string;
-        ja: number;
-        nej: number;
-        avstar: number;
-        franvarande: number;
-      }[],
-      majoritet: (majoritet.data ?? []) as { parti: string; majoritetsrost: string | null }[],
-      roster: (roster.data ?? []) as unknown as {
-        ledamot_id: string;
-        parti: string | null;
-        valkrets: string | null;
-        rost: string;
-        ledamoter: { fornamn: string; efternamn: string } | null;
-      }[],
+      partitotaler: partitotaler.map((p) => ({
+        parti: p.parti,
+        ja: p.ja,
+        nej: p.nej,
+        avstar: p.avstar,
+        franvarande: p.franvarande,
+      })),
+      majoritet: partitotaler.map((p) => ({ parti: p.parti, majoritetsrost: p.majoritetsrost })),
+      roster: rosterDocs.map((r) => ({
+        ledamot_id: r.ledamot_id,
+        parti: r.parti,
+        valkrets: r.valkrets,
+        rost: r.rost,
+        ledamoter: namn.get(r.ledamot_id) ?? null,
+      })),
     };
   });
 
@@ -592,43 +749,30 @@ export type VoteringsSammanfattningSvar =
 export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({ id: z.string() }).parse(input))
   .handler(async ({ data }): Promise<VoteringsSammanfattningSvar> => {
-    const db = publicDb();
-    const KOLUMNER = "sammanfattning, modell, tillrackligt_underlag, granskad, skapad";
+    const db = await fsDb();
 
-    const { data: sparad } = await db
-      .from("ai_voteringssammanfattningar")
-      .select(KOLUMNER)
-      .eq("votering_id", data.id)
-      .maybeSingle();
-    if (sparad) return { status: "klar", sammanfattning: sparad };
+    const sparad = await fsHämta<VoteringsSammanfattning>("ai_voteringssammanfattningar", data.id);
+    if (sparad) {
+      const { sammanfattning, modell, tillrackligt_underlag, granskad, skapad } = sparad;
+      return {
+        status: "klar",
+        sammanfattning: { sammanfattning, modell, tillrackligt_underlag, granskad, skapad },
+      };
+    }
 
     const { geminiKonfigurerad } = await import("./gemini.server");
     if (!geminiKonfigurerad()) return { status: "ej_konfigurerad" };
 
-    const { data: votering } = await db
-      .from("voteringar")
-      .select(
-        `${VOTERING_KOLUMNER}, arenden(titel, organ), beslutspunkter(rubrik, forslag, motforslag_nummer, motforslag_partier)`,
-      )
-      .eq("id", data.id)
-      .maybeSingle();
+    const votering = await fsHämta<VoteringDoc>("voteringar", data.id);
     if (!votering) return { status: "saknas" };
 
-    const [partitotaler, majoritet] = await Promise.all([
-      db.from("partitotaler").select("parti, ja, nej, avstar, franvarande").eq("votering_id", data.id),
-      db.from("v_partimajoritet").select("parti, majoritetsrost").eq("votering_id", data.id),
+    const [beslutspunkt, partitotalerSnap] = await Promise.all([
+      votering.beslutspunkt_id
+        ? fsHämta<Record<string, unknown>>("beslutspunkter", votering.beslutspunkt_id)
+        : null,
+      db.collection("partitotaler").where("votering_id", "==", data.id).get(),
     ]);
-    const majoritetsKarta = new Map((majoritet.data ?? []).map((m) => [m.parti, m.majoritetsrost] as const));
-
-    const v = votering as unknown as Votering & {
-      arenden: { titel: string | null; organ: string | null } | null;
-      beslutspunkter: {
-        rubrik: string | null;
-        forslag: string | null;
-        motforslag_nummer: string | null;
-        motforslag_partier: string | null;
-      } | null;
-    };
+    const partitotaler = partitotalerSnap.docs.map((d) => d.data() as PartitotalDoc);
 
     // Rate limit kontrolleras först när vi vet att en generering faktiskt behövs.
     const { reserveraAiGenerering, klientIp } = await import("./rate-limit.server");
@@ -640,23 +784,35 @@ export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
     let genererad;
     try {
       genererad = await genereraVoteringssammanfattning({
-      id: v.id,
-      titel: v.arenden?.titel ?? null,
-      beteckning: v.beteckning,
-      punkt: v.punkt,
-      rubrik: v.rubrik,
-      gallde: v.gallde,
-      datum: v.datum,
-      organ: v.arenden?.organ ?? null,
-      ja: v.ja,
-      nej: v.nej,
-      avstar: v.avstar,
-      franvarande: v.franvarande,
-      vinnare: v.vinnare,
-      beslutspunkt: v.beslutspunkter,
-      partier: ((partitotaler.data ?? []) as { parti: string; ja: number; nej: number; avstar: number; franvarande: number }[]).map(
-        (p) => ({ ...p, majoritetsrost: majoritetsKarta.get(p.parti) ?? null }),
-      ),
+        id: votering.id,
+        titel: votering.arende_titel ?? null,
+        beteckning: votering.beteckning,
+        punkt: votering.punkt,
+        rubrik: votering.rubrik,
+        gallde: votering.gallde,
+        datum: votering.datum,
+        organ: votering.organ ?? null,
+        ja: votering.ja,
+        nej: votering.nej,
+        avstar: votering.avstar,
+        franvarande: votering.franvarande,
+        vinnare: votering.vinnare,
+        beslutspunkt: beslutspunkt
+          ? {
+              rubrik: (beslutspunkt["rubrik"] as string | null) ?? null,
+              forslag: (beslutspunkt["forslag"] as string | null) ?? null,
+              motforslag_nummer: (beslutspunkt["motforslag_nummer"] as string | null) ?? null,
+              motforslag_partier: (beslutspunkt["motforslag_partier"] as string | null) ?? null,
+            }
+          : null,
+        partier: partitotaler.map((p) => ({
+          parti: p.parti,
+          ja: p.ja,
+          nej: p.nej,
+          avstar: p.avstar,
+          franvarande: p.franvarande,
+          majoritetsrost: p.majoritetsrost,
+        })),
       });
     } catch (fel) {
       if (fel instanceof GeminiKvotFel) {
@@ -666,68 +822,90 @@ export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
       throw fel;
     }
 
-    // Cachelagring är bästa-effort: saknas service key eller tabellen ska
-    // sammanfattningen ändå visas (den regenereras bara vid nästa besök).
+    // Cachelagring är bästa-effort: misslyckad sparning ska aldrig
+    // blockera själva sammanfattningen (den regenereras vid nästa besök).
     try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      // ignoreDuplicates: om två besökare triggar generering samtidigt vinner den första.
-      const { error } = await supabaseAdmin
-        .from("ai_voteringssammanfattningar")
-        .upsert({ votering_id: data.id, ...genererad }, { onConflict: "votering_id", ignoreDuplicates: true });
-      if (error) throw error;
+      await db
+        .collection("ai_voteringssammanfattningar")
+        .doc(data.id)
+        .set({ votering_id: data.id, ...genererad });
     } catch (fel) {
-      console.error("[Insikt] Kunde inte spara voteringssammanfattning:", fel instanceof Error ? fel.message : fel);
+      console.error(
+        "[Insikt] Kunde inte spara voteringssammanfattning:",
+        fel instanceof Error ? fel.message : fel,
+      );
     }
 
-    const { data: slutlig } = await db
-      .from("ai_voteringssammanfattningar")
-      .select(KOLUMNER)
-      .eq("votering_id", data.id)
-      .maybeSingle();
+    const slutlig = await fsHämta<VoteringsSammanfattning>("ai_voteringssammanfattningar", data.id);
 
     return {
       status: "klar",
-      sammanfattning: slutlig ?? { ...genererad, granskad: false, skapad: new Date().toISOString() },
+      sammanfattning: slutlig
+        ? {
+            sammanfattning: slutlig.sammanfattning,
+            modell: slutlig.modell,
+            tillrackligt_underlag: slutlig.tillrackligt_underlag,
+            granskad: slutlig.granskad,
+            skapad: slutlig.skapad,
+          }
+        : { ...genererad, granskad: false, skapad: new Date().toISOString() },
     };
   });
 
 export const getArende = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ id: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const { data: arende } = await db.from("arenden").select("*").eq("id", data.id).maybeSingle();
+    const db = await fsDb();
+    const arende = await fsHämta<ArendeDoc>("arenden", data.id);
     if (!arende) return null;
 
-    const [punkter, voteringar, amnen, sammanfattning, relaterade] = await Promise.all([
-      db.from("beslutspunkter").select("*").eq("arende_id", data.id).order("punkt"),
-      db.from("voteringar").select(VOTERING_KOLUMNER).eq("arende_id", data.id).order("punkt"),
-      db.from("arende_sakfragor").select("sakfraga, kalla, sakfragor(namn)").eq("arende_id", data.id),
-      db.from("ai_sammanfattningar").select("*").eq("arende_id", data.id).maybeSingle(),
-      db
-        .from("arenden")
-        .select("id, titel, beteckning, rm, datum")
-        .eq("organ", (arende as { organ: string | null }).organ ?? "")
-        .neq("id", data.id)
-        .order("datum", { ascending: false })
-        .limit(6),
-    ]);
+    const [punkterSnap, voteringarSnap, sammanfattning, relateradeSnap, sakfragorSnap] =
+      await Promise.all([
+        db.collection("beslutspunkter").where("arende_id", "==", data.id).get(),
+        db.collection("voteringar").where("arende_id", "==", data.id).get(),
+        fsHämta<Record<string, unknown>>("ai_sammanfattningar", data.id),
+        arende.organ
+          ? db.collection("arenden").where("organ", "==", arende.organ).get()
+          : Promise.resolve(null),
+        db.collection("sakfragor").get(),
+      ]);
+
+    const sakNamn = new Map(sakfragorSnap.docs.map((d) => [d.id, d.data()["namn"] as string]));
+    const kallor = arende.sakfragor_kalla ?? {};
+
+    const relaterade = (relateradeSnap?.docs ?? [])
+      .map((d) => ({ id: d.id, ...d.data() }) as ArendeDoc)
+      .filter((a) => a.id !== data.id)
+      .sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? ""))
+      .slice(0, 6)
+      .map((a) => ({
+        id: a.id,
+        titel: a.titel,
+        beteckning: a.beteckning,
+        rm: a.rm,
+        datum: a.datum,
+      }));
 
     return {
-      arende: arende as {
-        id: string;
-        rm: string | null;
-        beteckning: string | null;
-        organ: string | null;
-        doktyp: string | null;
-        titel: string | null;
-        undertitel: string | null;
-        datum: string | null;
-        publicerad: string | null;
-        kalla_url_html: string | null;
-        kalla_url_text: string | null;
-        uppdaterad: string;
+      arende: {
+        id: arende.id,
+        rm: arende.rm,
+        beteckning: arende.beteckning,
+        organ: arende.organ,
+        doktyp: arende.doktyp,
+        titel: arende.titel,
+        undertitel: arende.undertitel,
+        datum: arende.datum,
+        publicerad: arende.publicerad,
+        kalla_url_html: arende.kalla_url_html,
+        kalla_url_text: arende.kalla_url_text,
+        uppdaterad: arende.uppdaterad,
       },
-      punkter: (punkter.data ?? []) as {
+      punkter: punkterSnap.docs
+        .map((d) => d.data() as Record<string, unknown>)
+        .sort((a, b) =>
+          String(a["punkt"] ?? "").localeCompare(String(b["punkt"] ?? ""), "sv", { numeric: true }),
+        ) as {
         id: string;
         punkt: string;
         rubrik: string | null;
@@ -739,29 +917,25 @@ export const getArende = createServerFn({ method: "GET" })
         voteringskrav: string | null;
         votering_id: string | null;
       }[],
-      voteringar: (voteringar.data ?? []) as unknown as Votering[],
-      amnen: (amnen.data ?? []) as unknown as {
-        sakfraga: string;
-        kalla: string;
-        sakfragor: { namn: string } | null;
-      }[],
-      sammanfattning: sammanfattning.data as
-        | {
-            sammanfattning: string;
-            modell: string;
-            underlag_url: string | null;
-            tillrackligt_underlag: boolean;
-            granskad: boolean;
-            skapad: string;
+      voteringar: voteringarSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Votering)
+        .sort((a, b) => (a.punkt ?? "").localeCompare(b.punkt ?? "", "sv", { numeric: true })),
+      amnen: (arende.sakfragor ?? []).map((slug) => ({
+        sakfraga: slug,
+        kalla: kallor[slug] ?? "insikt",
+        sakfragor: sakNamn.has(slug) ? { namn: sakNamn.get(slug)! } : null,
+      })),
+      sammanfattning: sammanfattning
+        ? {
+            sammanfattning: sammanfattning["sammanfattning"] as string,
+            modell: sammanfattning["modell"] as string,
+            underlag_url: (sammanfattning["underlag_url"] as string | null) ?? null,
+            tillrackligt_underlag: sammanfattning["tillrackligt_underlag"] as boolean,
+            granskad: sammanfattning["granskad"] as boolean,
+            skapad: sammanfattning["skapad"] as string,
           }
-        | null,
-      relaterade: (relaterade.data ?? []) as {
-        id: string;
-        titel: string | null;
-        beteckning: string | null;
-        rm: string | null;
-        datum: string | null;
-      }[],
+        : null,
+      relaterade,
     };
   });
 
@@ -770,76 +944,76 @@ export const getArende = createServerFn({ method: "GET" })
 /* ------------------------------------------------------------------ */
 
 export const listSakfragor = createServerFn({ method: "GET" }).handler(async () => {
-  const db = publicDb();
-  const { data } = await db.from("sakfragor").select("*").order("ordning");
-  return (data ?? []) as {
-    slug: string;
-    namn: string;
-    beskrivning: string | null;
-    utskott: string[];
-    nyckelord: string[];
-  }[];
+  const db = await fsDb();
+  const snap = await db.collection("sakfragor").orderBy("ordning").get();
+  return snap.docs.map((d) => {
+    const s = d.data();
+    return {
+      slug: s["slug"] as string,
+      namn: s["namn"] as string,
+      beskrivning: (s["beskrivning"] as string | null) ?? null,
+      utskott: (s["utskott"] as string[]) ?? [],
+      nyckelord: (s["nyckelord"] as string[]) ?? [],
+    };
+  });
 });
 
 export const getSakfraga = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ slug: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const { data: sakfraga } = await db
-      .from("sakfragor")
-      .select("*")
-      .eq("slug", data.slug)
-      .maybeSingle();
+    const db = await fsDb();
+    const sakfraga = await fsHämta<{
+      slug: string;
+      namn: string;
+      beskrivning: string | null;
+      utskott: string[];
+    }>("sakfragor", data.slug);
     if (!sakfraga) return null;
 
-    const { data: kopplingar } = await db
-      .from("arende_sakfragor")
-      .select("arende_id")
-      .eq("sakfraga", data.slug)
-      .limit(2000);
-    const ids = (kopplingar ?? []).map((k) => k.arende_id);
-
-    if (ids.length === 0)
-      return { sakfraga: sakfraga as { slug: string; namn: string; beskrivning: string | null; utskott: string[] }, arenden: [], voteringar: [], utskott: [] };
-
-    const [arenden, voteringar] = await Promise.all([
-      db
-        .from("arenden")
-        .select("id, titel, beteckning, organ, rm, datum")
-        .in("id", ids)
-        .order("datum", { ascending: false })
-        .limit(50),
-      db
-        .from("voteringar")
-        .select(`${VOTERING_KOLUMNER}, arenden(id, titel)`)
-        .in("arende_id", ids)
-        .order("datum", { ascending: false, nullsFirst: false })
-        .limit(20),
+    const [arendenSnap, voteringarSnap] = await Promise.all([
+      db.collection("arenden").where("sakfragor", "array-contains", data.slug).get(),
+      db.collection("voteringar").where("sakfragor", "array-contains", data.slug).get(),
     ]);
 
+    const arenden = arendenSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as ArendeDoc)
+      .sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? ""))
+      .slice(0, 50)
+      .map((a) => ({
+        id: a.id,
+        titel: a.titel,
+        beteckning: a.beteckning,
+        organ: a.organ,
+        rm: a.rm,
+        datum: a.datum,
+      }));
+
+    const voteringar = voteringarSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc)
+      .sort((a, b) => {
+        if (a.datum && b.datum) return b.datum.localeCompare(a.datum);
+        if (a.datum) return -1;
+        if (b.datum) return 1;
+        return 0;
+      })
+      .slice(0, 20)
+      .map((v) => ({
+        ...v,
+        arenden: v.arende_id ? { id: v.arende_id, titel: v.arende_titel ?? null } : null,
+      }));
+
     return {
-      sakfraga: sakfraga as {
-        slug: string;
-        namn: string;
-        beskrivning: string | null;
-        utskott: string[];
+      sakfraga: {
+        slug: sakfraga.slug,
+        namn: sakfraga.namn,
+        beskrivning: sakfraga.beskrivning,
+        utskott: sakfraga.utskott,
       },
-      arenden: (arenden.data ?? []) as {
-        id: string;
-        titel: string | null;
-        beteckning: string | null;
-        organ: string | null;
-        rm: string | null;
-        datum: string | null;
-      }[],
-      voteringar: (voteringar.data ?? []) as unknown as (Votering & {
+      arenden,
+      voteringar: voteringar as (Votering & {
         arenden: { id: string; titel: string | null } | null;
       })[],
-      utskott: [
-        ...new Set(
-          (arenden.data ?? []).map((a) => a.organ).filter((v): v is string => !!v),
-        ),
-      ],
+      utskott: [...new Set(arenden.map((a) => a.organ).filter((v): v is string => !!v))],
     };
   });
 
@@ -852,41 +1026,62 @@ export const sok = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const q = data.q.replace(/[%,]/g, " ").trim();
     if (q.length < 2) return { ledamoter: [], partier: [], arenden: [] };
-    const db = publicDb();
+    const db = await fsDb();
 
-    const [ledamoter, partier, arenden] = await Promise.all([
-      db
-        .from("ledamoter")
-        .select(LEDAMOT_KOLUMNER)
-        .or(`fornamn.ilike.%${q}%,efternamn.ilike.%${q}%,sorteringsnamn.ilike.%${q}%`)
-        .order("status")
-        .limit(12),
-      db.from("partier").select("*").or(`namn.ilike.%${q}%,kod.ilike.${q}`).order("ordning").limit(9),
-      db
-        .from("arenden")
-        .select("id, titel, beteckning, organ, rm, datum")
-        .or(`titel.ilike.%${q}%,beteckning.ilike.%${q}%,id.ilike.%${q}%`)
-        .order("datum", { ascending: false, nullsFirst: false })
-        .limit(15),
+    const [ledamoterSnap, partierSnap, arendenSnap] = await Promise.all([
+      db.collection("ledamoter").get(),
+      db.collection("partier").get(),
+      db.collection("arenden").get(),
     ]);
 
-    return {
-      ledamoter: (ledamoter.data ?? []) as unknown as Ledamot[],
-      partier: (partier.data ?? []) as Parti[],
-      arenden: (arenden.data ?? []) as {
-        id: string;
-        titel: string | null;
-        beteckning: string | null;
-        organ: string | null;
-        rm: string | null;
-        datum: string | null;
-      }[],
-    };
+    const ledamoter = ledamoterSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as Ledamot & { sorteringsnamn?: string | null })
+      .filter((l) => textSok(q, l.fornamn, l.efternamn, l.sorteringsnamn))
+      .sort((a, b) => (a.status ?? "").localeCompare(b.status ?? "", "sv"))
+      .slice(0, 12);
+
+    const partier = partierSnap.docs
+      .map((d) => d.data() as Parti)
+      .filter((p) => textSok(q, p.namn) || p.kod.toLowerCase() === q.toLowerCase())
+      .sort((a, b) => a.ordning - b.ordning)
+      .slice(0, 9);
+
+    const arenden = arendenSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }) as ArendeDoc)
+      .filter((a) => textSok(q, a.titel, a.beteckning, a.id))
+      .sort((a, b) => {
+        if (a.datum && b.datum) return b.datum.localeCompare(a.datum);
+        if (a.datum) return -1;
+        if (b.datum) return 1;
+        return 0;
+      })
+      .slice(0, 15)
+      .map((a) => ({
+        id: a.id,
+        titel: a.titel,
+        beteckning: a.beteckning,
+        organ: a.organ,
+        rm: a.rm,
+        datum: a.datum,
+      }));
+
+    return { ledamoter, partier, arenden };
   });
 
 /* ------------------------------------------------------------------ */
 /* Jämförelser                                                        */
 /* ------------------------------------------------------------------ */
+
+function sorteraPaDatum<
+  T extends { datum: string | null; beteckning: string | null; punkt: string | null },
+>(rader: T[]) {
+  return rader.sort(
+    (a, b) =>
+      (b.datum ?? "").localeCompare(a.datum ?? "") ||
+      (a.beteckning ?? "").localeCompare(b.beteckning ?? "", "sv") ||
+      (a.punkt ?? "").localeCompare(b.punkt ?? "", "sv", { numeric: true }),
+  );
+}
 
 export const jamforLedamoter = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) =>
@@ -901,31 +1096,48 @@ export const jamforLedamoter = createServerFn({ method: "GET" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const [a, b, rader] = await Promise.all([
-      db.from("ledamoter").select(LEDAMOT_KOLUMNER).eq("id", data.a).maybeSingle(),
-      db.from("ledamoter").select(LEDAMOT_KOLUMNER).eq("id", data.b).maybeSingle(),
-      db.rpc("jamfor_ledamoter", {
-        _a: data.a,
-        _b: data.b,
-        ...period(data.fran, data.till, data.sakfraga),
-      }),
+    const [a, b, matrisA, matrisB] = await Promise.all([
+      fsHämta<Ledamot>("ledamoter", data.a),
+      fsHämta<Ledamot>("ledamoter", data.b),
+      fsHämta<{ poster: Record<string, MatrisPost> }>("rostmatriser", data.a),
+      fsHämta<{ poster: Record<string, MatrisPost> }>("rostmatriser", data.b),
     ]);
-    if (rader.error) throw new Error(rader.error.message);
-    const lista = (rader.data ?? []) as {
-      votering_id: string;
-      titel: string | null;
-      beteckning: string | null;
-      punkt: string | null;
-      datum: string | null;
-      rost_a: string;
-      rost_b: string;
-      jamforbar: boolean;
-      lika: boolean;
-    }[];
+
+    const posterA = matrisA?.poster ?? {};
+    const posterB = matrisB?.poster ?? {};
+    const fran = data.fran || null;
+    const till = data.till || null;
+    const sakfraga = data.sakfraga || null;
+
+    const lista = Object.entries(posterA)
+      .filter(([vid, pa]) => {
+        if (!posterB[vid]) return false;
+        if (!iPeriod(pa.datum, fran, till)) return false;
+        if (!harSakfraga(pa.sakfragor, sakfraga)) return false;
+        return true;
+      })
+      .map(([vid, pa]) => {
+        const pb = posterB[vid]!;
+        const rostA = pa.rost ?? "";
+        const rostB = pb.rost ?? "";
+        return {
+          votering_id: vid,
+          titel: pa.titel,
+          beteckning: pa.beteckning,
+          punkt: pa.punkt,
+          datum: pa.datum,
+          rost_a: rostA,
+          rost_b: rostB,
+          jamforbar: GILTIGA_ROSTER.has(rostA) && GILTIGA_ROSTER.has(rostB),
+          lika: GILTIGA_ROSTER.has(rostA) && rostA === rostB,
+        };
+      });
+
+    sorteraPaDatum(lista);
+
     return {
-      a: a.data as unknown as Ledamot | null,
-      b: b.data as unknown as Ledamot | null,
+      a,
+      b,
       rader: lista.slice(0, 300),
       totalt: lista.length,
       jamforbara: lista.filter((r) => r.jamforbar).length,
@@ -947,24 +1159,42 @@ export const jamforPartier = createServerFn({ method: "GET" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const { data: rader, error } = await db.rpc("jamfor_partier", {
-      _a: data.a,
-      _b: data.b,
-      ...period(data.fran, data.till, data.sakfraga),
-    });
-    if (error) throw new Error(error.message);
-    const lista = (rader ?? []) as {
-      votering_id: string;
-      titel: string | null;
-      beteckning: string | null;
-      punkt: string | null;
-      datum: string | null;
-      majoritet_a: string | null;
-      majoritet_b: string | null;
-      jamforbar: boolean;
-      lika: boolean;
-    }[];
+    const [matrisA, matrisB] = await Promise.all([
+      fsHämta<{ poster: Record<string, MatrisPost> }>("partimajoriteter", data.a),
+      fsHämta<{ poster: Record<string, MatrisPost> }>("partimajoriteter", data.b),
+    ]);
+
+    const posterA = matrisA?.poster ?? {};
+    const posterB = matrisB?.poster ?? {};
+    const fran = data.fran || null;
+    const till = data.till || null;
+    const sakfraga = data.sakfraga || null;
+
+    const lista = Object.entries(posterA)
+      .filter(([vid, pa]) => {
+        if (!(vid in posterB)) return false;
+        if (!iPeriod(pa.datum, fran, till)) return false;
+        if (!harSakfraga(pa.sakfragor, sakfraga)) return false;
+        return true;
+      })
+      .map(([vid, pa]) => {
+        const ma = pa.majoritet;
+        const mb = posterB[vid]!.majoritet;
+        return {
+          votering_id: vid,
+          titel: pa.titel,
+          beteckning: pa.beteckning,
+          punkt: pa.punkt,
+          datum: pa.datum,
+          majoritet_a: ma,
+          majoritet_b: mb,
+          jamforbar: ma !== null && mb !== null,
+          lika: ma !== null && ma === mb,
+        };
+      });
+
+    sorteraPaDatum(lista);
+
     return {
       rader: lista.slice(0, 300),
       totalt: lista.length,
@@ -991,69 +1221,67 @@ export const getBevakadeHandelser = createServerFn({ method: "POST" })
       .parse(input ?? {}),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
+    const db = await fsDb();
+
+    const hamtaManga = async <T>(samling: string, ids: string[]) => {
+      if (ids.length === 0) return [] as (T & { id: string })[];
+      const refs = ids.map((id) => db.collection(samling).doc(id));
+      const snaps = await db.getAll(...refs);
+      return snaps
+        .filter((s) => s.exists)
+        .map((s) => ({ id: s.id, ...s.data() }) as T & { id: string });
+    };
 
     const [ledamoter, arenden, voteringar] = await Promise.all([
-      data.ledamoter.length
-        ? db.from("ledamoter").select(LEDAMOT_KOLUMNER).in("id", data.ledamoter)
-        : Promise.resolve({ data: [] }),
-      data.arenden.length
-        ? db.from("arenden").select("id, titel, beteckning, organ, rm, datum").in("id", data.arenden)
-        : Promise.resolve({ data: [] }),
-      data.voteringar.length
-        ? db
-            .from("voteringar")
-            .select(`${VOTERING_KOLUMNER}, arenden(id, titel)`)
-            .in("id", data.voteringar)
-        : Promise.resolve({ data: [] }),
+      hamtaManga<Ledamot>("ledamoter", data.ledamoter),
+      hamtaManga<ArendeDoc>("arenden", data.arenden),
+      hamtaManga<VoteringDoc>("voteringar", data.voteringar),
     ]);
 
     // Flöde: nya voteringar som rör det användaren följer
-    let flode: (Votering & { arenden: { id: string; titel: string | null } | null; anledning: string })[] =
-      [];
+    let flode: (Votering & {
+      arenden: { id: string; titel: string | null } | null;
+      anledning: string;
+    })[] = [];
 
     if (data.sakfragor.length > 0 || data.partier.length > 0 || data.ledamoter.length > 0) {
-      const arendeIds = new Set<string>();
-      if (data.sakfragor.length > 0) {
-        const { data: kopplingar } = await db
-          .from("arende_sakfragor")
-          .select("arende_id, sakfraga")
-          .in("sakfraga", data.sakfragor)
-          .limit(3000);
-        for (const k of kopplingar ?? []) arendeIds.add(k.arende_id);
-      }
-      const { data: senaste } = await db
-        .from("voteringar")
-        .select(`${VOTERING_KOLUMNER}, arenden(id, titel)`)
-        .order("datum", { ascending: false, nullsFirst: false })
-        .limit(60);
-      flode = ((senaste ?? []) as unknown as (Votering & {
-        arenden: { id: string; titel: string | null } | null;
-      })[])
-        .filter((v) => (arendeIds.size === 0 ? true : v.arende_id && arendeIds.has(v.arende_id)))
+      const senasteSnap = await db
+        .collection("voteringar")
+        .orderBy("datum", "desc")
+        .limit(60)
+        .get();
+      flode = senasteSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc)
+        .filter((v) =>
+          data.sakfragor.length === 0
+            ? true
+            : (v.sakfragor ?? []).some((s) => data.sakfragor.includes(s)),
+        )
         .slice(0, 25)
         .map((v) => ({
           ...v,
+          arenden: v.arende_id ? { id: v.arende_id, titel: v.arende_titel ?? null } : null,
           anledning:
-            v.arende_id && arendeIds.has(v.arende_id)
+            data.sakfragor.length > 0 && (v.sakfragor ?? []).some((s) => data.sakfragor.includes(s))
               ? "Rör en sakfråga du följer"
               : "Ny votering i riksdagen",
         }));
     }
 
     return {
-      ledamoter: (ledamoter.data ?? []) as unknown as Ledamot[],
-      arenden: (arenden.data ?? []) as {
-        id: string;
-        titel: string | null;
-        beteckning: string | null;
-        organ: string | null;
-        rm: string | null;
-        datum: string | null;
-      }[],
-      voteringar: (voteringar.data ?? []) as unknown as (Votering & {
-        arenden: { id: string; titel: string | null } | null;
-      })[],
+      ledamoter,
+      arenden: arenden.map((a) => ({
+        id: a.id,
+        titel: a.titel,
+        beteckning: a.beteckning,
+        organ: a.organ,
+        rm: a.rm,
+        datum: a.datum,
+      })),
+      voteringar: voteringar.map((v) => ({
+        ...v,
+        arenden: v.arende_id ? { id: v.arende_id, titel: v.arende_titel ?? null } : null,
+      })) as (Votering & { arenden: { id: string; titel: string | null } | null })[],
       flode,
     };
   });
@@ -1073,13 +1301,13 @@ export const rapporteraFel = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const db = publicDb();
-    const { error } = await db.from("felrapporter").insert({
+    await fsNyRad("felrapporter", {
       sida: data.sida || null,
       beskrivning: data.beskrivning,
       epost: data.epost || null,
+      status: "ny",
+      skapad: new Date().toISOString(),
     });
-    if (error) throw new Error(error.message);
     return { ok: true };
   });
 
@@ -1088,39 +1316,76 @@ export const rapporteraFel = createServerFn({ method: "POST" })
 /* ------------------------------------------------------------------ */
 
 /** Kastar om den inloggade användaren inte har administratörsrollen. */
-async function kravAdmin(context: { supabase: SupabaseKlient; userId: string }) {
-  const { data, error } = await context.supabase.rpc("has_role", {
-    _user_id: context.userId,
-    _role: "admin",
-  });
-  if (error) throw new Error(error.message);
-  if (data !== true) throw new Error("Behörighet saknas: kräver administratörsroll.");
+async function kravAdmin(context: { userId: string }) {
+  const roll = await fsHämta<{ role: string }>("anvandarroller", context.userId);
+  if (roll?.role !== "admin") {
+    throw new Error("Behörighet saknas: kräver administratörsroll.");
+  }
 }
 
 export const getAdminData = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireFirebaseAuth])
   .handler(async ({ context }) => {
-  await kravAdmin(context);
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const [inlasningar, felrapporter, sammanfattningar] = await Promise.all([
-    supabaseAdmin.from("inlasningar").select("*").order("startad", { ascending: false }).limit(30),
-    supabaseAdmin.from("felrapporter").select("*").order("skapad", { ascending: false }).limit(50),
-    supabaseAdmin
-      .from("ai_sammanfattningar")
-      .select("*, arenden(id, titel, beteckning)")
-      .order("skapad", { ascending: false })
-      .limit(50),
-  ]);
+    await kravAdmin(context as { userId: string });
+    const db = await fsDb();
+    const [inlasningar, felrapporter, sammanfattningar, arenden] = await Promise.all([
+      db.collection("inlasningar").orderBy("startad", "desc").limit(30).get(),
+      db.collection("felrapporter").orderBy("skapad", "desc").limit(50).get(),
+      db.collection("ai_sammanfattningar").orderBy("skapad", "desc").limit(50).get(),
+      db.collection("arenden").get(),
+    ]);
 
-  return {
-    inlasningar: inlasningar.data ?? [],
-    felrapporter: felrapporter.data ?? [],
-    sammanfattningar: sammanfattningar.data ?? [],
-  };
+    const arendeInfo = new Map(
+      arenden.docs.map((d) => {
+        const a = d.data();
+        return [d.id, { id: d.id, titel: a["titel"], beteckning: a["beteckning"] }] as const;
+      }),
+    );
+
+    return {
+      inlasningar: inlasningar.docs.map((d) => {
+        const r = d.data();
+        return {
+          id: d.id,
+          typ: r["typ"] as string,
+          status: r["status"] as string,
+          antal: r["antal"] as number,
+          detalj: (r["detalj"] as string | null) ?? null,
+          rm: (r["rm"] as string | null) ?? null,
+          startad: r["startad"] as string,
+          avslutad: (r["avslutad"] as string | null) ?? null,
+        };
+      }),
+      felrapporter: felrapporter.docs.map((d) => {
+        const r = d.data();
+        return {
+          id: d.id,
+          sida: (r["sida"] as string | null) ?? null,
+          beskrivning: r["beskrivning"] as string,
+          epost: (r["epost"] as string | null) ?? null,
+          status: r["status"] as string,
+          skapad: r["skapad"] as string,
+        };
+      }),
+      sammanfattningar: sammanfattningar.docs.map((d) => {
+        const s = d.data();
+        return {
+          id: d.id,
+          arende_id: s["arende_id"] as string,
+          sammanfattning: s["sammanfattning"] as string,
+          modell: s["modell"] as string,
+          underlag_url: (s["underlag_url"] as string | null) ?? null,
+          tillrackligt_underlag: s["tillrackligt_underlag"] as boolean,
+          granskad: s["granskad"] as boolean,
+          skapad: s["skapad"] as string,
+          arenden: arendeInfo.get(s["arende_id"] as string) ?? null,
+        };
+      }),
+    };
   });
 
 export const uppdateraFelrapport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireFirebaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -1130,18 +1395,13 @@ export const uppdateraFelrapport = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    await kravAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("felrapporter")
-      .update({ status: data.status })
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
+    await kravAdmin(context as { userId: string });
+    await fsUppdatera("felrapporter", data.id, { status: data.status });
     return { ok: true };
   });
 
 export const granskaAiSammanfattning = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireFirebaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -1152,22 +1412,17 @@ export const granskaAiSammanfattning = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    await kravAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await kravAdmin(context as { userId: string });
     const updatePayload: { granskad: boolean; sammanfattning?: string } = {
       granskad: data.granskad,
     };
     if (data.text !== undefined) updatePayload.sammanfattning = data.text;
-    const { error } = await supabaseAdmin
-      .from("ai_sammanfattningar")
-      .update(updatePayload)
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
+    await fsUppdatera("ai_sammanfattningar", data.id, updatePayload);
     return { ok: true };
   });
 
 export const korInlasning = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireFirebaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -1178,7 +1433,7 @@ export const korInlasning = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    await kravAdmin(context);
+    await kravAdmin(context as { userId: string });
     const { ingestLedamoter, ingestRiksmote } = await import("./riksdagen.server");
     if (data.typ === "ledamoter") {
       const res = await ingestLedamoter("tjanstgorande");
@@ -1236,9 +1491,7 @@ function beraknaMotionDokId(bet: string): string | null {
 const motionCache = new Map<string, MotionInfo>();
 
 export const getMotion = createServerFn({ method: "GET" })
-  .inputValidator((input: unknown) =>
-    z.object({ beteckning: z.string() }).parse(input),
-  )
+  .inputValidator((input: unknown) => z.object({ beteckning: z.string() }).parse(input))
   .handler(async ({ data }): Promise<MotionInfo | null> => {
     const sokBeteckning = data.beteckning.trim();
     if (motionCache.has(sokBeteckning)) {
@@ -1257,7 +1510,9 @@ export const getMotion = createServerFn({ method: "GET" })
           const dArray = dokList["dokument"];
           const firstDok = Array.isArray(dArray) ? dArray[0] : dArray;
           if (firstDok && typeof firstDok === "object") {
-            dokId = (firstDok as Record<string, unknown>)["dok_id"] as string || (firstDok as Record<string, unknown>)["id"] as string;
+            dokId =
+              ((firstDok as Record<string, unknown>)["dok_id"] as string) ||
+              ((firstDok as Record<string, unknown>)["id"] as string);
           }
         }
       }
@@ -1284,7 +1539,10 @@ export const getMotion = createServerFn({ method: "GET" })
           .trim();
         const motIdx = clean.search(/motivering/i);
         if (motIdx !== -1) {
-          motivering = clean.slice(motIdx, motIdx + 1500).replace(/^motivering\s*/i, "").trim();
+          motivering = clean
+            .slice(motIdx, motIdx + 1500)
+            .replace(/^motivering\s*/i, "")
+            .trim();
         }
       }
 
@@ -1332,5 +1590,3 @@ export const getMotion = createServerFn({ method: "GET" })
       return null;
     }
   });
-
-

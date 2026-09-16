@@ -1,13 +1,14 @@
-# Fristående container för Cloud Run (alternativ till App Hosting).
-# Bygg: docker build --build-arg VITE_SUPABASE_URL=... --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=... -t insikt .
+# Fristående container för Cloud Run.
+# Bygg: docker build --build-arg VITE_FIREBASE_API_KEY=... -t insikt .
 FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_PUBLISHABLE_KEY
-ARG VITE_SUPABASE_PROJECT_ID
+ARG VITE_FIREBASE_API_KEY
+ARG VITE_FIREBASE_AUTH_DOMAIN
+ARG VITE_FIREBASE_PROJECT_ID
+ARG VITE_FIREBASE_APP_ID
 RUN npm run build
 
 FROM node:22-slim

@@ -1,8 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 
-import { supabase } from "@/integrations/supabase/client";
+import { firebaseAuth } from "@/integrations/firebase/client";
 import { Sidhuvud } from "@/components/insikt/tillstand";
 
 export const Route = createFileRoute("/auth")({
@@ -33,17 +38,10 @@ function Inloggning() {
   const [pagar, setPagar] = useState(false);
 
   useEffect(() => {
-    let aktiv = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (aktiv && data.session) navigate({ to: "/admin" });
+    const avsluta = onAuthStateChanged(firebaseAuth(), (user) => {
+      if (user) navigate({ to: "/admin" });
     });
-    const { data: prenumeration } = supabase.auth.onAuthStateChange((handelse, session) => {
-      if (handelse === "SIGNED_IN" && session) navigate({ to: "/admin" });
-    });
-    return () => {
-      aktiv = false;
-      prenumeration.subscription.unsubscribe();
-    };
+    return avsluta;
   }, [navigate]);
 
   async function skicka(e: React.FormEvent) {
@@ -51,15 +49,9 @@ function Inloggning() {
     setPagar(true);
     try {
       if (lage === "logga-in") {
-        const { error } = await supabase.auth.signInWithPassword({ email: epost, password: losenord });
-        if (error) throw error;
+        await signInWithEmailAndPassword(firebaseAuth(), epost, losenord);
       } else {
-        const { error } = await supabase.auth.signUp({
-          email: epost,
-          password: losenord,
-          options: { emailRedirectTo: `${window.location.origin}/auth` },
-        });
-        if (error) throw error;
+        await createUserWithEmailAndPassword(firebaseAuth(), epost, losenord);
         toast.success("Kontot är skapat. Bekräfta e-postadressen om du får ett brev.");
       }
     } catch (fel) {

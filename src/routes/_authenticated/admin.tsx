@@ -13,14 +13,11 @@ import {
 } from "@/lib/insikt.functions";
 import { datum, datumKort, antal } from "@/lib/format";
 import { Fel, Laddar, Sidhuvud } from "@/components/insikt/tillstand";
-import { supabase } from "@/integrations/supabase/client";
+import { firebaseAuth } from "@/integrations/firebase/client";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
-    meta: [
-      { title: "Administration — Insikt" },
-      { name: "robots", content: "noindex, nofollow" },
-    ],
+    meta: [{ title: "Administration — Insikt" }, { name: "robots", content: "noindex, nofollow" }],
   }),
   component: AdminVy,
 });
@@ -94,7 +91,9 @@ function AdminVy() {
                 type="button"
                 onClick={() => setAktivFlik("status")}
                 className={`rounded px-3 py-1 font-medium transition-colors ${
-                  aktivFlik === "status" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  aktivFlik === "status"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground"
                 }`}
               >
                 Datatäckning
@@ -125,7 +124,9 @@ function AdminVy() {
                 type="button"
                 onClick={() => setAktivFlik("ai")}
                 className={`rounded px-3 py-1 font-medium transition-colors ${
-                  aktivFlik === "ai" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  aktivFlik === "ai"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground"
                 }`}
               >
                 AI-sammanfattningar ({adminQuery.data?.sammanfattningar.length ?? 0})
@@ -135,7 +136,7 @@ function AdminVy() {
             <button
               type="button"
               onClick={async () => {
-                await supabase.auth.signOut();
+                await firebaseAuth().signOut();
                 navigate({ to: "/auth" });
               }}
               className="text-xs text-muted-foreground hover:underline"
@@ -161,19 +162,29 @@ function AdminVy() {
                   <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-lg bg-[var(--yta)] p-4">
                       <span className="text-xs text-muted-foreground">Ledamöter</span>
-                      <p className="mt-1 text-2xl font-semibold">{antal(statusQuery.data.ledamoter)}</p>
+                      <p className="mt-1 text-2xl font-semibold">
+                        {antal(statusQuery.data.ledamoter)}
+                      </p>
                     </div>
                     <div className="rounded-lg bg-[var(--yta)] p-4">
-                      <span className="text-xs text-muted-foreground">Ärenden &amp; betänkanden</span>
-                      <p className="mt-1 text-2xl font-semibold">{antal(statusQuery.data.arenden)}</p>
+                      <span className="text-xs text-muted-foreground">
+                        Ärenden &amp; betänkanden
+                      </span>
+                      <p className="mt-1 text-2xl font-semibold">
+                        {antal(statusQuery.data.arenden)}
+                      </p>
                     </div>
                     <div className="rounded-lg bg-[var(--yta)] p-4">
                       <span className="text-xs text-muted-foreground">Voteringar</span>
-                      <p className="mt-1 text-2xl font-semibold">{antal(statusQuery.data.voteringar)}</p>
+                      <p className="mt-1 text-2xl font-semibold">
+                        {antal(statusQuery.data.voteringar)}
+                      </p>
                     </div>
                     <div className="rounded-lg bg-[var(--yta)] p-4">
                       <span className="text-xs text-muted-foreground">Enskilda röster</span>
-                      <p className="mt-1 text-2xl font-semibold">{antal(statusQuery.data.roster)}</p>
+                      <p className="mt-1 text-2xl font-semibold">
+                        {antal(statusQuery.data.roster)}
+                      </p>
                     </div>
                   </div>
 
@@ -233,7 +244,9 @@ function AdminVy() {
                 </p>
 
                 {adminQuery.data.inlasningar.length === 0 ? (
-                  <p className="mt-4 text-xs text-muted-foreground">Inga inläsningar registrerade ännu.</p>
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    Inga inläsningar registrerade ännu.
+                  </p>
                 ) : (
                   <div className="mt-4 overflow-x-auto rounded-lg border border-border">
                     <table className="w-full text-left text-xs">
@@ -263,7 +276,9 @@ function AdminVy() {
                               </span>
                             </td>
                             <td className="px-4 py-2.5 font-mono">{jobb.antal}</td>
-                            <td className="px-4 py-2.5 text-muted-foreground">{jobb.detalj ?? "–"}</td>
+                            <td className="px-4 py-2.5 text-muted-foreground">
+                              {jobb.detalj ?? "–"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -315,7 +330,10 @@ function AdminVy() {
 
                         {fel.epost ? (
                           <p className="text-muted-foreground">
-                            Kontakt e-post: <a href={`mailto:${fel.epost}`} className="underline">{fel.epost}</a>
+                            Kontakt e-post:{" "}
+                            <a href={`mailto:${fel.epost}`} className="underline">
+                              {fel.epost}
+                            </a>
                           </p>
                         ) : null}
                       </div>
@@ -366,8 +384,12 @@ function AdminVy() {
                         </p>
 
                         <div className="flex flex-wrap items-center justify-between border-t border-border/60 pt-2 text-muted-foreground">
-                          <span>Modell: {s.modell} · Skapad: {datum(s.skapad)}</span>
-                          <span>Tillräckligt underlag: {s.tillrackligt_underlag ? "Ja" : "Nej"}</span>
+                          <span>
+                            Modell: {s.modell} · Skapad: {datum(s.skapad)}
+                          </span>
+                          <span>
+                            Tillräckligt underlag: {s.tillrackligt_underlag ? "Ja" : "Nej"}
+                          </span>
                         </div>
                       </div>
                     ))}

@@ -1,8 +1,17 @@
 /**
- * Inläsning av Riksdagens öppna data (data.riksdagen.se).
+ * Inläsning av Riksdagens öppna data (data.riksdagen.se) till Firestore.
  * Alla uppgifter lagras med stabila identifierare och länk till originalet.
  * Ingen uppgift hittas på: saknas den i källan lagras null.
+ *
+ * Denormalisering vid skrivning:
+ * - arenden.sakfragor / sakfragor_kalla (från matchning mot sakfragor)
+ * - voteringar.organ / arende_titel / sakfragor
+ * - partitotaler.majoritetsrost / enligt + voteringsmeta
+ * - roster.partimajoritet + voteringsmeta
+ * - rostmatriser/{ledamot_id} och partimajoriteter/{parti} för aggregeringar
  */
+
+import { fsDb, fsNyRad, fsRaderaDar, fsSkrivManga, majoritetsrost } from "./fs-db.server";
 
 const BASE = "https://data.riksdagen.se";
 
@@ -43,11 +52,6 @@ async function getJson(url: string): Promise<Json> {
   return JSON.parse(text) as Json;
 }
 
-async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
-
 export type IngestResult = { typ: string; antal: number; detalj: string };
 
 async function logRun(
@@ -58,8 +62,7 @@ async function logRun(
   rm: string | null,
   startad: string,
 ) {
-  const db = await admin();
-  await db.from("inlasningar").insert({
+  await fsNyRad("inlasningar", {
     typ,
     status,
     antal,
@@ -76,7 +79,6 @@ async function logRun(
 
 export async function ingestLedamoter(scope: "tjanstgorande" | "samtliga"): Promise<IngestResult> {
   const startad = new Date().toISOString();
-  const db = await admin();
   try {
     const partier =
       scope === "samtliga"
@@ -93,39 +95,7 @@ export async function ingestLedamoter(scope: "tjanstgorande" | "samtliga"): Prom
       const lista = (data["personlista"] ?? {}) as Json;
       const personer = asArray(lista["person"] as Json | Json[]);
 
-      const rader = personer
-        .map((p) => {
-          const id = str(p["intressent_id"]);
-          if (!id) return null;
-          return {
-            id,
-            sourceid: str(p["sourceid"]),
-            fornamn: str(p["tilltalsnamn"]) ?? str(p["fornamn"]) ?? "",
-            efternamn: str(p["efternamn"]) ?? "",
-            sorteringsnamn: str(p["sorteringsnamn"]),
-            parti: str(p["parti"]),
-            valkrets: str(p["valkrets"]),
-            kon: str(p["kon"]),
-            fodd_ar: toInt(p["fodd_ar"]),
-            status: str(p["status"]),
-            bild_url: str(p["bild_url_192"]) ?? str(p["bild_url_max"]),
-            bild_url_liten: str(p["bild_url_80"]),
-            kalla_url: str(p["sourceid"])
-              ? `https://www.riksdagen.se/sv/ledamoter-partier/ledamot/_${str(p["sourceid"])}`
-              : str(p["person_url_xml"]),
-            uppdaterad: new Date().toISOString(),
-          };
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null && r.efternamn !== "");
-
-      for (let i = 0; i < rader.length; i += 200) {
-        const chunk = rader.slice(i, i + 200);
-        const { error } = await db.from("ledamoter").upsert(chunk);
-        if (error) throw new Error(error.message);
-        antal += chunk.length;
-      }
-
-      // Uppdrag
+      // Uppdrag per ledamot först – behövs för ledamotens utskottslista.
       const uppdragRader: {
         ledamot_id: string;
         organ_kod: string | null;
@@ -136,6 +106,7 @@ export async function ingestLedamoter(scope: "tjanstgorande" | "samtliga"): Prom
         fran: string | null;
         till: string | null;
       }[] = [];
+      const utskottPerLedamot = new Map<string, Set<string>>();
       const ledamotIds: string[] = [];
       for (const p of personer) {
         const id = str(p["intressent_id"]);
@@ -156,15 +127,51 @@ export async function ingestLedamoter(scope: "tjanstgorande" | "samtliga"): Prom
             fran: toDate(u["from"]),
             till: toDate(u["tom"]),
           });
+          if (organ && str(u["typ"]) === "uppdrag") {
+            const set = utskottPerLedamot.get(id) ?? new Set<string>();
+            set.add(organ);
+            utskottPerLedamot.set(id, set);
+          }
         }
       }
-      for (let i = 0; i < ledamotIds.length; i += 200) {
-        const chunk = ledamotIds.slice(i, i + 200);
-        await db.from("uppdrag").delete().in("ledamot_id", chunk);
+
+      const rader = personer
+        .map((p) => {
+          const id = str(p["intressent_id"]);
+          if (!id) return null;
+          return {
+            id,
+            data: {
+              id,
+              sourceid: str(p["sourceid"]),
+              fornamn: str(p["tilltalsnamn"]) ?? str(p["fornamn"]) ?? "",
+              efternamn: str(p["efternamn"]) ?? "",
+              sorteringsnamn: str(p["sorteringsnamn"]),
+              parti: str(p["parti"]),
+              valkrets: str(p["valkrets"]),
+              kon: str(p["kon"]),
+              fodd_ar: toInt(p["fodd_ar"]),
+              status: str(p["status"]),
+              bild_url: str(p["bild_url_192"]) ?? str(p["bild_url_max"]),
+              bild_url_liten: str(p["bild_url_80"]),
+              kalla_url: str(p["sourceid"])
+                ? `https://www.riksdagen.se/sv/ledamoter-partier/ledamot/_${str(p["sourceid"])}`
+                : str(p["person_url_xml"]),
+              utskott: [...(utskottPerLedamot.get(id) ?? [])].sort(),
+              uppdaterad: new Date().toISOString(),
+            },
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null && r.data.efternamn !== "");
+
+      antal += await fsSkrivManga("ledamoter", rader);
+
+      // Uppdrag: radera ledamotens gamla och skriv de nya.
+      for (let i = 0; i < ledamotIds.length; i += 30) {
+        await fsRaderaDar("uppdrag", "ledamot_id", ledamotIds.slice(i, i + 30));
       }
-      for (let i = 0; i < uppdragRader.length; i += 500) {
-        const { error } = await db.from("uppdrag").insert(uppdragRader.slice(i, i + 500));
-        if (error) throw new Error(error.message);
+      for (const u of uppdragRader) {
+        await fsNyRad("uppdrag", u);
       }
     }
 
@@ -184,16 +191,19 @@ export async function ingestLedamoter(scope: "tjanstgorande" | "samtliga"): Prom
 type Sakfraga = { slug: string; nyckelord: string[]; utskott: string[] };
 
 async function hamtaSakfragor(): Promise<Sakfraga[]> {
-  const db = await admin();
-  const { data } = await db.from("sakfragor").select("slug, nyckelord, utskott");
-  return (data ?? []) as Sakfraga[];
+  const db = await fsDb();
+  const snap = await db.collection("sakfragor").get();
+  return snap.docs.map((d) => {
+    const s = d.data();
+    return {
+      slug: d.id,
+      nyckelord: (s["nyckelord"] as string[]) ?? [],
+      utskott: (s["utskott"] as string[]) ?? [],
+    };
+  });
 }
 
-function matchaSakfragor(
-  sakfragor: Sakfraga[],
-  titel: string,
-  organ: string | null,
-): string[] {
+function matchaSakfragor(sakfragor: Sakfraga[], titel: string, organ: string | null): string[] {
   const t = titel.toLowerCase();
   const träffar = new Set<string>();
   for (const s of sakfragor) {
@@ -210,7 +220,11 @@ function matchaSakfragor(
 
 type PartiTotal = { parti: string; ja: number; nej: number; avstar: number; franvarande: number };
 
-function lasPartitotaler(html: unknown): { gallde: string | null; rader: PartiTotal[]; totalt: PartiTotal | null } {
+function lasPartitotaler(html: unknown): {
+  gallde: string | null;
+  rader: PartiTotal[];
+  totalt: PartiTotal | null;
+} {
   const block = (html ?? {}) as Json;
   const table = (block["table"] ?? {}) as Json;
   const caption = (table["caption"] ?? {}) as Json;
@@ -235,7 +249,7 @@ function lasPartitotaler(html: unknown): { gallde: string | null; rader: PartiTo
 
 /** Läser in ett enskilt betänkande med beslutspunkter, voteringar och röster. */
 export async function ingestArende(dokId: string): Promise<{ voteringar: number; roster: number }> {
-  const db = await admin();
+  const db = await fsDb();
   const data = await getJson(`${BASE}/utskottsforslag/${dokId}.json`);
   const block = (data["utskottsforslag"] ?? {}) as Json;
   const dok = (block["dokument"] ?? {}) as Json;
@@ -245,29 +259,30 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
   const organ = str(dok["organ"]);
 
   const sakfragor = await hamtaSakfragor();
-
-  const { error: arendeError } = await db.from("arenden").upsert({
-    id: dokId,
-    rm,
-    beteckning: bet,
-    organ,
-    doktyp: str(dok["doktyp"]),
-    titel,
-    undertitel: str(dok["subtitel"]),
-    datum: toDate(dok["datum"]),
-    publicerad: str(dok["publicerad"]),
-    kalla_url_html: `https://data.riksdagen.se/dokument/${dokId}`,
-    kalla_url_text: `https://data.riksdagen.se/dokument/${dokId}/text`,
-    uppdaterad: new Date().toISOString(),
-  });
-  if (arendeError) throw new Error(arendeError.message);
-
   const amnen = matchaSakfragor(sakfragor, titel, organ);
-  if (amnen.length > 0) {
-    await db
-      .from("arende_sakfragor")
-      .upsert(amnen.map((sakfraga) => ({ arende_id: dokId, sakfraga, kalla: "insikt" })));
-  }
+
+  await db
+    .collection("arenden")
+    .doc(dokId)
+    .set(
+      {
+        id: dokId,
+        rm,
+        beteckning: bet,
+        organ,
+        doktyp: str(dok["doktyp"]),
+        titel,
+        undertitel: str(dok["subtitel"]),
+        datum: toDate(dok["datum"]),
+        publicerad: str(dok["publicerad"]),
+        kalla_url_html: `https://data.riksdagen.se/dokument/${dokId}`,
+        kalla_url_text: `https://data.riksdagen.se/dokument/${dokId}/text`,
+        sakfragor: amnen,
+        sakfragor_kalla: Object.fromEntries(amnen.map((s) => [s, "insikt"])),
+        uppdaterad: new Date().toISOString(),
+      },
+      { merge: true },
+    );
 
   // Beslutspunkter
   const forslag = asArray(
@@ -279,111 +294,246 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
       if (!punkt) return null;
       return {
         id: `${dokId}-${punkt}`,
-        arende_id: dokId,
-        punkt,
-        rubrik: str(f["rubrik"]),
-        forslag: str(f["forslag"]),
-        beslutstyp: str(f["beslutstyp"]),
-        motforslag_nummer: str(f["motforslag_nummer"]),
-        motforslag_partier: str(f["motforslag_partier"])?.replace(/"/g, "") ?? null,
-        vinnare: str(f["vinnare"]),
-        voteringskrav: str(f["voteringskrav"]),
-        votering_id: str(f["votering_id"])?.toLowerCase() ?? null,
+        data: {
+          id: `${dokId}-${punkt}`,
+          arende_id: dokId,
+          punkt,
+          rubrik: str(f["rubrik"]),
+          forslag: str(f["forslag"]),
+          beslutstyp: str(f["beslutstyp"]),
+          motforslag_nummer: str(f["motforslag_nummer"]),
+          motforslag_partier: str(f["motforslag_partier"])?.replace(/"/g, "") ?? null,
+          vinnare: str(f["vinnare"]),
+          voteringskrav: str(f["voteringskrav"]),
+          votering_id: str(f["votering_id"])?.toLowerCase() ?? null,
+        },
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
-  if (punktRader.length > 0) {
-    const { error } = await db.from("beslutspunkter").upsert(punktRader);
-    if (error) throw new Error(error.message);
-  }
+  if (punktRader.length > 0) await fsSkrivManga("beslutspunkter", punktRader);
 
-  // Voteringar med partitotaler
-  let voteringar = 0;
-  for (const f of forslag) {
-    const voteringId = str(f["votering_id"])?.toLowerCase();
-    const punkt = str(f["punkt"]);
-    if (!voteringId || !punkt) continue;
-    const { gallde, rader, totalt } = lasPartitotaler(f["votering_sammanfattning_html"]);
-
-    const { error } = await db.from("voteringar").upsert({
-      id: voteringId,
-      arende_id: dokId,
-      beslutspunkt_id: `${dokId}-${punkt}`,
-      rm,
-      beteckning: bet,
-      punkt,
-      typ: str(f["punkttyp"]),
-      rubrik: str(f["rubrik"]),
-      gallde,
-      ja: totalt?.ja ?? 0,
-      nej: totalt?.nej ?? 0,
-      avstar: totalt?.avstar ?? 0,
-      franvarande: totalt?.franvarande ?? 0,
-      vinnare: str(f["vinnare"]),
-      kalla_url: `https://data.riksdagen.se/votering/${voteringId.toUpperCase()}`,
-      uppdaterad: new Date().toISOString(),
-    });
-    if (error) throw new Error(error.message);
-    voteringar += 1;
-
-    if (rader.length > 0) {
-      await db
-        .from("partitotaler")
-        .upsert(rader.map((r) => ({ votering_id: voteringId, ...r })));
-    }
-  }
-
-  // Individuella röster för hela betänkandet
-  let roster = 0;
-  if (rm && bet && voteringar > 0) {
+  // Individuella röster för hela betänkandet (behövs för majoritet/enligt innan
+  // partitotaler och roster skrivs med denormaliserade fält).
+  let rostRader: {
+    votering_id: string;
+    ledamot_id: string;
+    parti: string | null;
+    valkrets: string | null;
+    rost: string;
+    avser: string | null;
+  }[] = [];
+  const datumPerVotering = new Map<string, string>();
+  const avserPerVotering = new Map<string, string | null>();
+  if (rm && bet) {
     const vdata = await getJson(
       `${BASE}/voteringlista/?rm=${encodeURIComponent(rm)}&bet=${encodeURIComponent(bet)}&utformat=json&sz=100000`,
     );
     const vlista = (vdata["voteringlista"] ?? {}) as Json;
     const rows = asArray(vlista["votering"] as Json | Json[]);
-    const datumPerVotering = new Map<string, string>();
-    const rostRader = rows
-      .map((r) => {
-        const vid = str(r["votering_id"])?.toLowerCase();
-        const ledamot = str(r["intressent_id"]);
-        const rost = str(r["rost"]);
-        if (!vid || !ledamot || !rost) return null;
-        const d = toDate(r["systemdatum"]);
-        if (d) {
-          const nuvarande = datumPerVotering.get(vid);
-          if (!nuvarande || d < nuvarande) datumPerVotering.set(vid, d);
-        }
-        return {
+    const unika = new Map<string, (typeof rostRader)[number]>();
+    for (const r of rows) {
+      const vid = str(r["votering_id"])?.toLowerCase();
+      const ledamot = str(r["intressent_id"]);
+      const rost = str(r["rost"]);
+      if (!vid || !ledamot || !rost) continue;
+      const d = toDate(r["systemdatum"]);
+      if (d) {
+        const nuvarande = datumPerVotering.get(vid);
+        if (!nuvarande || d < nuvarande) datumPerVotering.set(vid, d);
+      }
+      if (!avserPerVotering.has(vid)) avserPerVotering.set(vid, str(r["avser"]));
+      const nyckel = `${vid}|${ledamot}`;
+      if (!unika.has(nyckel)) {
+        unika.set(nyckel, {
           votering_id: vid,
           ledamot_id: ledamot,
           parti: str(r["parti"]),
           valkrets: str(r["valkrets"]),
           rost,
           avser: str(r["avser"]),
-        };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null);
-
-    // Dubbletter kan förekomma i källan (samma ledamot och votering) – behåll första.
-    const unika = new Map<string, (typeof rostRader)[number]>();
-    for (const r of rostRader) unika.set(`${r.votering_id}|${r.ledamot_id}`, r);
-    const lista = [...unika.values()];
-
-    for (let i = 0; i < lista.length; i += 500) {
-      const { error } = await db.from("roster").upsert(lista.slice(i, i + 500));
-      if (error) throw new Error(error.message);
-      roster += Math.min(500, lista.length - i);
+        });
+      }
     }
+    rostRader = [...unika.values()];
+  }
 
-    for (const [vid, datum] of datumPerVotering) {
-      const avser = rows.find((r) => str(r["votering_id"])?.toLowerCase() === vid);
-      await db
-        .from("voteringar")
-        .update({ datum, avser: str(avser?.["avser"]) })
-        .eq("id", vid);
+  // Voteringar med partitotaler
+  let voteringar = 0;
+  const berorddaLedamoter = new Map<string, Record<string, unknown>>();
+  const berorddaPartier = new Map<string, Record<string, unknown>>();
+
+  for (const f of forslag) {
+    const voteringId = str(f["votering_id"])?.toLowerCase();
+    const punkt = str(f["punkt"]);
+    if (!voteringId || !punkt) continue;
+    const { gallde, rader, totalt } = lasPartitotaler(f["votering_sammanfattning_html"]);
+    const rubrik = str(f["rubrik"]);
+    const vDatum = datumPerVotering.get(voteringId) ?? null;
+    const vTitel = titel || rubrik;
+
+    await db
+      .collection("voteringar")
+      .doc(voteringId)
+      .set(
+        {
+          id: voteringId,
+          arende_id: dokId,
+          beslutspunkt_id: `${dokId}-${punkt}`,
+          rm,
+          beteckning: bet,
+          punkt,
+          typ: str(f["punkttyp"]),
+          rubrik,
+          gallde,
+          ja: totalt?.ja ?? 0,
+          nej: totalt?.nej ?? 0,
+          avstar: totalt?.avstar ?? 0,
+          franvarande: totalt?.franvarande ?? 0,
+          vinnare: str(f["vinnare"]),
+          datum: vDatum,
+          avser: avserPerVotering.get(voteringId) ?? null,
+          organ,
+          arende_titel: titel,
+          sakfragor: amnen,
+          kalla_url: `https://data.riksdagen.se/votering/${voteringId.toUpperCase()}`,
+          uppdaterad: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    voteringar += 1;
+
+    // Röster för just den här voteringen – räkna "enligt majoritet" per parti.
+    const rosterIVotering = rostRader.filter((r) => r.votering_id === voteringId);
+
+    if (rader.length > 0) {
+      const totalPoster = rader.map((r) => {
+        const majoritet = majoritetsrost(r);
+        const enligt = majoritet
+          ? rosterIVotering.filter((x) => x.parti === r.parti && x.rost === majoritet).length
+          : 0;
+        const post = {
+          id: `${voteringId}|${r.parti}`,
+          data: {
+            votering_id: voteringId,
+            parti: r.parti,
+            ja: r.ja,
+            nej: r.nej,
+            avstar: r.avstar,
+            franvarande: r.franvarande,
+            majoritetsrost: majoritet,
+            enligt,
+            datum: vDatum,
+            rm,
+            arende_id: dokId,
+            organ,
+            titel: vTitel,
+            rubrik,
+            beteckning: bet,
+            punkt,
+            sakfragor: amnen,
+          },
+        };
+        const befintlig = berorddaPartier.get(r.parti) ?? {};
+        berorddaPartier.set(r.parti, {
+          ...befintlig,
+          [voteringId]: {
+            majoritet,
+            datum: vDatum,
+            sakfragor: amnen,
+            titel: vTitel,
+            beteckning: bet,
+            punkt,
+          },
+        });
+        return post;
+      });
+      await fsSkrivManga("partitotaler", totalPoster);
     }
   }
+
+  // Skriv röster med denormaliserad voteringsmeta + partimajoritet.
+  let roster = 0;
+  if (rostRader.length > 0) {
+    const majoritetKarta = new Map<string, string | null>();
+    for (const f of forslag) {
+      const vid = str(f["votering_id"])?.toLowerCase();
+      if (!vid) continue;
+      const { rader } = lasPartitotaler(f["votering_sammanfattning_html"]);
+      for (const r of rader) majoritetKarta.set(`${vid}|${r.parti}`, majoritetsrost(r));
+    }
+    const voteringMeta = new Map<
+      string,
+      {
+        datum: string | null;
+        titel: string | null;
+        rubrik: string | null;
+        beteckning: string | null;
+        punkt: string | null;
+      }
+    >();
+    for (const f of forslag) {
+      const vid = str(f["votering_id"])?.toLowerCase();
+      const punkt = str(f["punkt"]);
+      if (!vid || !punkt) continue;
+      voteringMeta.set(vid, {
+        datum: datumPerVotering.get(vid) ?? null,
+        titel: titel || str(f["rubrik"]),
+        rubrik: str(f["rubrik"]),
+        beteckning: bet,
+        punkt,
+      });
+    }
+
+    const poster = rostRader.map((r) => {
+      const meta = voteringMeta.get(r.votering_id);
+      const majoritet = r.parti
+        ? (majoritetKarta.get(`${r.votering_id}|${r.parti}`) ?? null)
+        : null;
+      const befintlig = berorddaLedamoter.get(r.ledamot_id) ?? {};
+      berorddaLedamoter.set(r.ledamot_id, {
+        ...befintlig,
+        [r.votering_id]: {
+          rost: r.rost,
+          parti: r.parti,
+          majoritet,
+          datum: meta?.datum ?? null,
+          sakfragor: amnen,
+          titel: meta?.titel ?? null,
+          beteckning: meta?.beteckning ?? null,
+          punkt: meta?.punkt ?? null,
+        },
+      });
+      return {
+        id: `${r.votering_id}|${r.ledamot_id}`,
+        data: {
+          ...r,
+          datum: meta?.datum ?? null,
+          arende_id: dokId,
+          organ,
+          titel: meta?.titel ?? null,
+          rubrik: meta?.rubrik ?? null,
+          beteckning: meta?.beteckning ?? null,
+          punkt: meta?.punkt ?? null,
+          sakfragor: amnen,
+          partimajoritet: majoritet,
+        },
+      };
+    });
+    roster = await fsSkrivManga("roster", poster);
+  }
+
+  // Uppdatera röstmatriser och partimajoriteter för berörda ledamöter/partier.
+  const matrisPoster: { id: string; data: Record<string, unknown> }[] = [];
+  for (const [ledamot, poster] of berorddaLedamoter) {
+    matrisPoster.push({ id: ledamot, data: { poster } });
+  }
+  if (matrisPoster.length > 0) await fsSkrivManga("rostmatriser", matrisPoster);
+  const partiPoster: { id: string; data: Record<string, unknown> }[] = [];
+  for (const [parti, poster] of berorddaPartier) {
+    partiPoster.push({ id: parti, data: { poster } });
+  }
+  if (partiPoster.length > 0) await fsSkrivManga("partimajoriteter", partiPoster);
 
   return { voteringar, roster };
 }
@@ -391,7 +541,7 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
 /** Läser in betänkanden för ett riksmöte, nyaste först. */
 export async function ingestRiksmote(rm: string, max = 25): Promise<IngestResult> {
   const startad = new Date().toISOString();
-  const db = await admin();
+  const db = await fsDb();
   try {
     const data = await getJson(
       `${BASE}/dokumentlista/?doktyp=bet&rm=${encodeURIComponent(rm)}&utformat=json&sz=200&sort=datum&sortorder=desc`,
@@ -399,8 +549,8 @@ export async function ingestRiksmote(rm: string, max = 25): Promise<IngestResult
     const lista = (data["dokumentlista"] ?? {}) as Json;
     const dokument = asArray(lista["dokument"] as Json | Json[]);
 
-    const { data: redan } = await db.from("arenden").select("id").eq("rm", rm);
-    const kanda = new Set((redan ?? []).map((r) => (r as { id: string }).id));
+    const redan = await db.collection("arenden").where("rm", "==", rm).get();
+    const kanda = new Set(redan.docs.map((d) => d.id));
 
     const kandidater = dokument
       .map((d) => str(d["dok_id"]))
