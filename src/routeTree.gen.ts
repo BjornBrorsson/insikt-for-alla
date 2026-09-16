@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as BevakningarRouteImport } from './routes/bevakningar'
 import { Route as JamforRouteImport } from './routes/jamfor'
 import { Route as KallorOchMetodRouteImport } from './routes/kallor-och-metod'
@@ -18,6 +17,7 @@ import { Route as OmInsiktRouteImport } from './routes/om-insikt'
 import { Route as OrdlistaRouteImport } from './routes/ordlista'
 import { Route as RapporteraFelRouteImport } from './routes/rapportera-fel'
 import { Route as SokRouteImport } from './routes/sok'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ArendenIdRouteImport } from './routes/arenden/$id'
 import { Route as LedamoterIndexRouteImport } from './routes/ledamoter/index'
 import { Route as LedamoterIdRouteImport } from './routes/ledamoter/$id'
@@ -34,11 +34,6 @@ import { Route as ApiPublicHooksInlasningRouteImport } from './routes/api/public
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BevakningarRoute = BevakningarRouteImport.update({
@@ -74,6 +69,11 @@ const RapporteraFelRoute = RapporteraFelRouteImport.update({
 const SokRoute = SokRouteImport.update({
   id: '/sok',
   path: '/sok',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/_authenticated/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ArendenIdRoute = ArendenIdRouteImport.update({
@@ -139,7 +139,6 @@ const ApiPublicHooksInlasningRoute = ApiPublicHooksInlasningRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/bevakningar': typeof BevakningarRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
@@ -147,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/ordlista': typeof OrdlistaRoute
   '/rapportera-fel': typeof RapporteraFelRoute
   '/sok': typeof SokRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/arenden/$id': typeof ArendenIdRoute
   '/ledamoter/$id': typeof LedamoterIdRoute
   '/partier/$kod': typeof PartierKodRoute
@@ -162,7 +162,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/bevakningar': typeof BevakningarRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
@@ -170,6 +169,7 @@ export interface FileRoutesByTo {
   '/ordlista': typeof OrdlistaRoute
   '/rapportera-fel': typeof RapporteraFelRoute
   '/sok': typeof SokRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/arenden/$id': typeof ArendenIdRoute
   '/ledamoter/$id': typeof LedamoterIdRoute
   '/partier/$kod': typeof PartierKodRoute
@@ -186,7 +186,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/bevakningar': typeof BevakningarRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
@@ -194,6 +193,7 @@ export interface FileRoutesById {
   '/ordlista': typeof OrdlistaRoute
   '/rapportera-fel': typeof RapporteraFelRoute
   '/sok': typeof SokRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/arenden/$id': typeof ArendenIdRoute
   '/ledamoter/$id': typeof LedamoterIdRoute
   '/partier/$kod': typeof PartierKodRoute
@@ -211,7 +211,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/admin'
     | '/bevakningar'
     | '/jamfor'
     | '/kallor-och-metod'
@@ -219,6 +218,7 @@ export interface FileRouteTypes {
     | '/ordlista'
     | '/rapportera-fel'
     | '/sok'
+    | '/admin'
     | '/arenden/$id'
     | '/ledamoter/$id'
     | '/partier/$kod'
@@ -234,7 +234,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/bevakningar'
     | '/jamfor'
     | '/kallor-och-metod'
@@ -242,6 +241,7 @@ export interface FileRouteTypes {
     | '/ordlista'
     | '/rapportera-fel'
     | '/sok'
+    | '/admin'
     | '/arenden/$id'
     | '/ledamoter/$id'
     | '/partier/$kod'
@@ -257,7 +257,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/admin'
     | '/bevakningar'
     | '/jamfor'
     | '/kallor-och-metod'
@@ -265,6 +264,7 @@ export interface FileRouteTypes {
     | '/ordlista'
     | '/rapportera-fel'
     | '/sok'
+    | '/_authenticated/admin'
     | '/arenden/$id'
     | '/ledamoter/$id'
     | '/partier/$kod'
@@ -281,7 +281,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
   BevakningarRoute: typeof BevakningarRoute
   JamforRoute: typeof JamforRoute
   KallorOchMetodRoute: typeof KallorOchMetodRoute
@@ -289,6 +288,7 @@ export interface RootRouteChildren {
   OrdlistaRoute: typeof OrdlistaRoute
   RapporteraFelRoute: typeof RapporteraFelRoute
   SokRoute: typeof SokRoute
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   ArendenIdRoute: typeof ArendenIdRoute
   LedamoterIdRoute: typeof LedamoterIdRoute
   PartierKodRoute: typeof PartierKodRoute
@@ -310,13 +310,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bevakningar': {
@@ -366,6 +359,13 @@ declare module '@tanstack/react-router' {
       path: '/sok'
       fullPath: '/sok'
       preLoaderRoute: typeof SokRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/arenden/$id': {
@@ -457,7 +457,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
   BevakningarRoute: BevakningarRoute,
   JamforRoute: JamforRoute,
   KallorOchMetodRoute: KallorOchMetodRoute,
@@ -465,6 +464,7 @@ const rootRouteChildren: RootRouteChildren = {
   OrdlistaRoute: OrdlistaRoute,
   RapporteraFelRoute: RapporteraFelRoute,
   SokRoute: SokRoute,
+  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   ArendenIdRoute: ArendenIdRoute,
   LedamoterIdRoute: LedamoterIdRoute,
   PartierKodRoute: PartierKodRoute,

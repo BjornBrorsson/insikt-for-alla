@@ -14,7 +14,7 @@ import {
 import { datum, datumKort, antal } from "@/lib/format";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 
-export const Route = createFileRoute("/admin")({
+export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
       { title: "Administration — Insikt" },
