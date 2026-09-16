@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function Laddar({ rader = 4, text = "Hämtar uppgifter …" }: { rader?: number; text?: string }) {
+export function Laddar({
+  rader = 4,
+  text = "Hämtar uppgifter …",
+}: {
+  rader?: number;
+  text?: string;
+}) {
   return (
     <div className="space-y-3" role="status" aria-live="polite">
       <p className="text-sm text-muted-foreground">{text}</p>
@@ -56,7 +62,13 @@ export function EgenBerakning({ children }: { children: ReactNode }) {
   );
 }
 
-export function Kalla({ url, text = "Öppna originalkällan hos riksdagen" }: { url: string | null; text?: string }) {
+export function Kalla({
+  url,
+  text = "Öppna originalkällan hos riksdagen",
+}: {
+  url: string | null;
+  text?: string;
+}) {
   if (!url) {
     return <p className="text-xs text-muted-foreground">Källänk saknas för den här uppgiften.</p>;
   }
@@ -67,7 +79,8 @@ export function Kalla({ url, text = "Öppna originalkällan hos riksdagen" }: { 
       rel="noreferrer noopener"
       className="text-sm text-[var(--accent-insikt)] underline underline-offset-2"
     >
-      {text} ↗
+      {text} <span aria-hidden="true">↗</span>
+      <span className="sr-only"> (öppnas i ny flik)</span>
     </a>
   );
 }

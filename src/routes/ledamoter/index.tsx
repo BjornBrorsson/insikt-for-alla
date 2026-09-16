@@ -100,7 +100,16 @@ function LedamoterLista() {
 
   function exporteraCsv() {
     if (!query.data) return;
-    const rubriker = ["ID", "Förnamn", "Efternamn", "Parti", "Valkrets", "Status", "Födelseår", "Kön"];
+    const rubriker = [
+      "ID",
+      "Förnamn",
+      "Efternamn",
+      "Parti",
+      "Valkrets",
+      "Status",
+      "Födelseår",
+      "Kön",
+    ];
     const rader = query.data.ledamoter.map((l) => [
       l.id,
       l.fornamn,
@@ -135,7 +144,10 @@ function LedamoterLista() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* Namnsökning */}
             <div>
-              <label htmlFor="ledamot-sok" className="block text-xs font-medium text-muted-foreground">
+              <label
+                htmlFor="ledamot-sok"
+                className="block text-xs font-medium text-muted-foreground"
+              >
                 Sök namn
               </label>
               <input
@@ -154,7 +166,10 @@ function LedamoterLista() {
 
             {/* Parti */}
             <div>
-              <label htmlFor="filter-parti" className="block text-xs font-medium text-muted-foreground">
+              <label
+                htmlFor="filter-parti"
+                className="block text-xs font-medium text-muted-foreground"
+              >
                 Parti
               </label>
               <select
@@ -174,7 +189,10 @@ function LedamoterLista() {
 
             {/* Valkrets */}
             <div>
-              <label htmlFor="filter-valkrets" className="block text-xs font-medium text-muted-foreground">
+              <label
+                htmlFor="filter-valkrets"
+                className="block text-xs font-medium text-muted-foreground"
+              >
                 Valkrets
               </label>
               <select
@@ -194,7 +212,10 @@ function LedamoterLista() {
 
             {/* Tjänstgöringsstatus */}
             <div>
-              <label htmlFor="filter-status" className="block text-xs font-medium text-muted-foreground">
+              <label
+                htmlFor="filter-status"
+                className="block text-xs font-medium text-muted-foreground"
+              >
                 Tjänstgöring
               </label>
               <select
@@ -266,6 +287,7 @@ function LedamoterLista() {
                 <button
                   type="button"
                   onClick={() => uppdateraFilter({ vy: "kort" })}
+                  aria-pressed={(search.vy || "kort") === "kort"}
                   className={`rounded px-2.5 py-1 ${
                     (search.vy || "kort") === "kort"
                       ? "bg-primary text-primary-foreground font-medium"
@@ -277,6 +299,7 @@ function LedamoterLista() {
                 <button
                   type="button"
                   onClick={() => uppdateraFilter({ vy: "tabell" })}
+                  aria-pressed={search.vy === "tabell"}
                   className={`rounded px-2.5 py-1 ${
                     search.vy === "tabell"
                       ? "bg-primary text-primary-foreground font-medium"
@@ -331,14 +354,24 @@ function LedamoterLista() {
               {search.vy === "tabell" ? (
                 /* Tabellvy */
                 <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
-                  <table className="w-full text-left text-sm">
+                  <table aria-label="Riksdagens ledamöter" className="w-full text-left text-sm">
                     <thead className="border-b border-border bg-[var(--yta)] text-xs text-muted-foreground">
                       <tr>
-                        <th className="px-4 py-3 font-medium">Namn</th>
-                        <th className="px-4 py-3 font-medium">Parti</th>
-                        <th className="px-4 py-3 font-medium">Valkrets</th>
-                        <th className="px-4 py-3 font-medium">Status</th>
-                        <th className="px-4 py-3 font-medium text-right">Åtgärd</th>
+                        <th scope="col" className="px-4 py-3 font-medium">
+                          Namn
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium">
+                          Parti
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium">
+                          Valkrets
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium">
+                          Status
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-medium text-right">
+                          Åtgärd
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -353,7 +386,7 @@ function LedamoterLista() {
                               {l.bild_url_liten ? (
                                 <img
                                   src={l.bild_url_liten}
-                                  alt=""
+                                  alt={`Porträtt av ${ledamotsnamn(l)}`}
                                   className="h-7 w-6 rounded object-cover"
                                 />
                               ) : null}

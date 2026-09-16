@@ -29,14 +29,16 @@ export function Bevaka({ typ, id, etikett }: { typ: BevakningsTyp; id: string; e
       disabled={!laddad}
       onClick={() => {
         const nu = vaxla(typ, id);
-        toast(
-          nu ? `Följer ${etikett}` : `Slutade följa ${etikett}`,
-          { description: "Bevakningen sparas bara i den här webbläsaren." },
-        );
+        toast(nu ? `Följer ${etikett}` : `Slutade följa ${etikett}`, {
+          description: "Bevakningen sparas bara i den här webbläsaren.",
+        });
       }}
       aria-pressed={aktiv}
+      aria-label={aktiv ? `Sluta bevaka ${etikett}` : `Bevaka ${etikett}`}
       className={`rounded-md border px-3 py-2 text-sm ${
-        aktiv ? "border-[var(--accent-insikt)] bg-[var(--accent-insikt-svag)]" : "border-input hover:bg-accent"
+        aktiv
+          ? "border-[var(--accent-insikt)] bg-[var(--accent-insikt-svag)]"
+          : "border-input hover:bg-accent"
       }`}
     >
       {aktiv ? "★ Följer" : "☆ Följ"}
@@ -64,8 +66,8 @@ export function RostDiagram({
   const varden: Record<string, number> = {
     Ja: ja,
     Nej: nej,
-    "Avstår": avstar,
-    "Frånvarande": franvarande,
+    Avstår: avstar,
+    Frånvarande: franvarande,
   };
   const summa = ja + nej + avstar + franvarande;
   if (summa === 0) {
@@ -91,7 +93,10 @@ export function RostDiagram({
       <ul className={`mt-2 flex flex-wrap gap-x-4 gap-y-1 ${kompakt ? "text-xs" : "text-sm"}`}>
         {ROSTER.map((r) => (
           <li key={r} className="flex items-center gap-1.5">
-            <span aria-hidden className={`inline-block h-2.5 w-2.5 rounded-sm ${rostStil[r]!.klass}`} />
+            <span
+              aria-hidden
+              className={`inline-block h-2.5 w-2.5 rounded-sm ${rostStil[r]!.klass}`}
+            />
             <span aria-hidden className="text-muted-foreground">
               {rostStil[r]!.tecken}
             </span>
@@ -110,7 +115,10 @@ export function RostMarke({ rost }: { rost: string }) {
   const stil = rostStil[rost];
   return (
     <span className="inline-flex items-center gap-1.5 text-sm">
-      <span aria-hidden className={`inline-block h-2.5 w-2.5 rounded-sm ${stil?.klass ?? "bg-muted"}`} />
+      <span
+        aria-hidden
+        className={`inline-block h-2.5 w-2.5 rounded-sm ${stil?.klass ?? "bg-muted"}`}
+      />
       <span aria-hidden>{stil?.tecken ?? "?"}</span>
       {rost}
     </span>

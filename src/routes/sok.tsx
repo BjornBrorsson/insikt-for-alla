@@ -65,16 +65,27 @@ function SokSida() {
         rubrik="Sök i Insikt"
         lead="Hitta snabbt bland riksdagens 349 ledamöter, samtliga partier och tusentals betänkanden och beslut."
         barn={
-          <form onSubmit={handleSubmit} className="flex max-w-xl gap-2">
+          <form
+            role="search"
+            aria-label="Sök i Insikt"
+            onSubmit={handleSubmit}
+            className="flex max-w-xl gap-2"
+          >
+            <label htmlFor="insikt-search-input" className="sr-only">
+              Sök ledamot, parti, utskott eller beteckning
+            </label>
             <input
+              id="insikt-search-input"
               type="search"
               value={inmatning}
               onChange={(e) => setInmatning(e.target.value)}
               placeholder="Sök ledamot, parti, utskott eller beteckning (t.ex. FiU1) …"
+              aria-label="Sök i Insikt"
               className="h-11 flex-1 rounded-md border border-input bg-background px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             />
             <button
               type="submit"
+              aria-label="Utför sökning"
               className="h-11 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               Sök
@@ -83,7 +94,7 @@ function SokSida() {
         }
       />
 
-      <div className="mx-auto max-w-6xl px-4 py-10">
+      <div className="mx-auto max-w-6xl px-4 py-10" aria-live="polite" aria-atomic="false">
         {!q || q.length < 2 ? (
           <div className="rounded-xl border border-dashed border-border bg-[var(--yta)] p-10 text-center">
             <h2 className="text-xl font-normal">Skriv minst 2 tecken för att söka</h2>
@@ -106,9 +117,7 @@ function SokSida() {
             {/* Partier */}
             {query.data!.partier.length > 0 ? (
               <section>
-                <h2 className="text-2xl font-normal">
-                  Partier ({query.data!.partier.length})
-                </h2>
+                <h2 className="text-2xl font-normal">Partier ({query.data!.partier.length})</h2>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {query.data!.partier.map((p) => (
                     <Link

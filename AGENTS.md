@@ -11,6 +11,10 @@
 
 <!-- LOVABLE:END -->
 
+## Hantering av Issues/Tickets (Github)
+- När en Agent plockar upp en issue ska Agenten alltid kommentera "Påbörjad av [AGENTNAMN]".
+- Vid avslutat arbete ska issuen uppdateras med en kommentar på vad som gjorts, varför samt stängas med rätt status. Detta för att undvika att två agenter eller personer arbetar med samma issue samtidigt. 
+
 ## Utveckling
 
 - `npm run dev` startar Vite/TanStack Start. `npx tsc --noEmit` för typkontroll, `npm run lint` för ESLint (många befintliga prettier-avvikelser – formatera bara filer du själv rör).

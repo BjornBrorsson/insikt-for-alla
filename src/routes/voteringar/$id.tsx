@@ -253,16 +253,30 @@ function VoteringDetalj() {
           </p>
 
           <div className="mt-5 overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table aria-label="Partiernas röstfördelning" className="w-full text-left text-sm">
               <thead className="border-b border-border bg-[var(--yta)] text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Parti</th>
-                  <th className="px-4 py-3 font-medium">Partiets majoritetsröst</th>
-                  <th className="px-4 py-3 font-medium">Ja</th>
-                  <th className="px-4 py-3 font-medium">Nej</th>
-                  <th className="px-4 py-3 font-medium">Avstår</th>
-                  <th className="px-4 py-3 font-medium">Frånvarande</th>
-                  <th className="px-4 py-3 font-medium text-right">Graf</th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Parti
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Partiets majoritetsröst
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Ja
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Nej
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Avstår
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium">
+                    Frånvarande
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-medium text-right">
+                    Graf
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -322,6 +336,7 @@ function VoteringDetalj() {
             <button
               type="button"
               onClick={exporteraCsv}
+              aria-label="Exportera röstlängd till CSV-fil"
               className="rounded-md border border-input px-3 py-1.5 text-xs hover:bg-accent"
             >
               Exportera röstlängd till CSV ↗
@@ -335,12 +350,14 @@ function VoteringDetalj() {
               value={sokLedamot}
               onChange={(e) => setSokLedamot(e.target.value)}
               placeholder="Sök ledamot i voteringen …"
+              aria-label="Sök ledamot i voteringen"
               className="h-9 w-60 rounded-md border border-input bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             />
 
             <select
               value={filterParti}
               onChange={(e) => setFilterParti(e.target.value)}
+              aria-label="Filtrera ledamöter på parti"
               className="h-9 rounded-md border border-input bg-background px-2 text-xs"
             >
               <option value="">Alla partier</option>
@@ -354,6 +371,7 @@ function VoteringDetalj() {
             <select
               value={filterRost}
               onChange={(e) => setFilterRost(e.target.value)}
+              aria-label="Filtrera på röstning"
               className="h-9 rounded-md border border-input bg-background px-2 text-xs"
             >
               <option value="">Alla röster</option>
@@ -374,20 +392,33 @@ function VoteringDetalj() {
             </label>
           </div>
 
-          <div className="mt-4 text-xs text-muted-foreground">
+          <div className="mt-4 text-xs text-muted-foreground" aria-live="polite">
             Visar {filtreradeRoster.length} av {roster.length} ledamöter
           </div>
 
           {/* Röstlängdstabell */}
           <div className="mt-3 max-h-[600px] overflow-y-auto rounded-lg border border-border">
-            <table className="w-full text-left text-sm">
+            <table
+              aria-label="Individuell röstlängd per ledamot"
+              className="w-full text-left text-sm"
+            >
               <thead className="sticky top-0 border-b border-border bg-[var(--yta)] text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium">Ledamot</th>
-                  <th className="px-4 py-2.5 font-medium">Parti</th>
-                  <th className="px-4 py-2.5 font-medium">Valkrets</th>
-                  <th className="px-4 py-2.5 font-medium">Röst</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Avvikelse</th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">
+                    Ledamot
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">
+                    Parti
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">
+                    Valkrets
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 font-medium">
+                    Röst
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 font-medium text-right">
+                    Avvikelse
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
