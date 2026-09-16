@@ -16,6 +16,7 @@ import { Route as AvvikelserRouteImport } from './routes/avvikelser'
 import { Route as BevakningarRouteImport } from './routes/bevakningar'
 import { Route as JamforRouteImport } from './routes/jamfor'
 import { Route as KallorOchMetodRouteImport } from './routes/kallor-och-metod'
+import { Route as NeutralitetRouteImport } from './routes/neutralitet'
 import { Route as OmInsiktRouteImport } from './routes/om-insikt'
 import { Route as OrdlistaRouteImport } from './routes/ordlista'
 import { Route as RapporteraFelRouteImport } from './routes/rapportera-fel'
@@ -67,6 +68,11 @@ const JamforRoute = JamforRouteImport.update({
 const KallorOchMetodRoute = KallorOchMetodRouteImport.update({
   id: '/kallor-och-metod',
   path: '/kallor-och-metod',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NeutralitetRoute = NeutralitetRouteImport.update({
+  id: '/neutralitet',
+  path: '/neutralitet',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OmInsiktRoute = OmInsiktRouteImport.update({
@@ -167,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/bevakningar': typeof BevakningarRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/neutralitet': typeof NeutralitetRoute
   '/om-insikt': typeof OmInsiktRoute
   '/ordlista': typeof OrdlistaRoute
   '/rapportera-fel': typeof RapporteraFelRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/bevakningar': typeof BevakningarRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/neutralitet': typeof NeutralitetRoute
   '/om-insikt': typeof OmInsiktRoute
   '/ordlista': typeof OrdlistaRoute
   '/rapportera-fel': typeof RapporteraFelRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/bevakningar': typeof BevakningarRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/neutralitet': typeof NeutralitetRoute
   '/om-insikt': typeof OmInsiktRoute
   '/ordlista': typeof OrdlistaRoute
   '/rapportera-fel': typeof RapporteraFelRoute
@@ -249,6 +258,7 @@ export interface FileRouteTypes {
     | '/bevakningar'
     | '/jamfor'
     | '/kallor-och-metod'
+    | '/neutralitet'
     | '/om-insikt'
     | '/ordlista'
     | '/rapportera-fel'
@@ -275,6 +285,7 @@ export interface FileRouteTypes {
     | '/bevakningar'
     | '/jamfor'
     | '/kallor-och-metod'
+    | '/neutralitet'
     | '/om-insikt'
     | '/ordlista'
     | '/rapportera-fel'
@@ -302,6 +313,7 @@ export interface FileRouteTypes {
     | '/bevakningar'
     | '/jamfor'
     | '/kallor-och-metod'
+    | '/neutralitet'
     | '/om-insikt'
     | '/ordlista'
     | '/rapportera-fel'
@@ -330,6 +342,7 @@ export interface RootRouteChildren {
   BevakningarRoute: typeof BevakningarRoute
   JamforRoute: typeof JamforRoute
   KallorOchMetodRoute: typeof KallorOchMetodRoute
+  NeutralitetRoute: typeof NeutralitetRoute
   OmInsiktRoute: typeof OmInsiktRoute
   OrdlistaRoute: typeof OrdlistaRoute
   RapporteraFelRoute: typeof RapporteraFelRoute
@@ -398,6 +411,13 @@ declare module '@tanstack/react-router' {
       path: '/kallor-och-metod'
       fullPath: '/kallor-och-metod'
       preLoaderRoute: typeof KallorOchMetodRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/neutralitet': {
+      id: '/neutralitet'
+      path: '/neutralitet'
+      fullPath: '/neutralitet'
+      preLoaderRoute: typeof NeutralitetRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/om-insikt': {
@@ -548,6 +568,7 @@ const rootRouteChildren: RootRouteChildren = {
   BevakningarRoute: BevakningarRoute,
   JamforRoute: JamforRoute,
   KallorOchMetodRoute: KallorOchMetodRoute,
+  NeutralitetRoute: NeutralitetRoute,
   OmInsiktRoute: OmInsiktRoute,
   OrdlistaRoute: OrdlistaRoute,
   RapporteraFelRoute: RapporteraFelRoute,

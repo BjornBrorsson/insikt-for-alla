@@ -28,9 +28,9 @@ function OmInsikt() {
           <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
             <h2 className="text-2xl font-normal">Vårt syfte</h2>
             <p className="mt-3 text-muted-foreground leading-relaxed">
-              Sveriges riksdag fattar varje år tusentals beslut som formar samhället — från statsbudget
-              och lagstiftning till infrastruktur och välfärd. Samtidigt är riksdagens formella
-              dokument ofta svårgenomträngliga: betänkanden på hundratals sidor, formella
+              Sveriges riksdag fattar varje år tusentals beslut som formar samhället — från
+              statsbudget och lagstiftning till infrastruktur och välfärd. Samtidigt är riksdagens
+              formella dokument ofta svårgenomträngliga: betänkanden på hundratals sidor, formella
               yrkanden och snåriga voteringslistor.
             </p>
             <p className="mt-3 text-muted-foreground leading-relaxed">
@@ -54,22 +54,31 @@ function OmInsikt() {
               beslut eller ett förslag är ”bra” eller ”dåligt”.
             </p>
             <p className="mt-3 text-muted-foreground leading-relaxed">
-              Vårt uppdrag är uteslutande att redovisa vad som faktiskt hände i riksdagen, på ett
-              så klart, sakligt och verifierbart sätt som möjligt. Vi tillskriver aldrig ledamöter
-              dolda motiv eller ideologiska etiketter som inte finns i det formella beslutsunderlaget.
+              Vårt uppdrag är uteslutande att redovisa vad som faktiskt hände i riksdagen, på ett så
+              klart, sakligt och verifierbart sätt som möjligt. Vi tillskriver aldrig ledamöter
+              dolda motiv eller ideologiska etiketter som inte finns i det formella
+              beslutsunderlaget.
             </p>
+            <div className="mt-4">
+              <Link
+                to="/neutralitet"
+                className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent-insikt)] hover:underline"
+              >
+                Läs vår fullständiga neutralitetsdeklaration och hur vi bevisar oberoendet →
+              </Link>
+            </div>
           </section>
 
           <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
             <h2 className="text-2xl font-normal">100 % öppna data och full spårbarhet</h2>
             <p className="mt-3 text-muted-foreground leading-relaxed">
-              All information om ledamöter, uppdrag, ärenden, beslutspunkter och enskilda röster hämtas
-              direkt från <strong>Riksdagens öppna data</strong> (data.riksdagen.se).
+              All information om ledamöter, uppdrag, ärenden, beslutspunkter och enskilda röster
+              hämtas direkt från <strong>Riksdagens öppna data</strong> (data.riksdagen.se).
             </p>
             <p className="mt-3 text-muted-foreground leading-relaxed">
               Vi skapar aldrig egna påhittade siffror. På varje sida i Insikt finns en direktlänk
-              till Riksdagens officiella dokument och protokoll så att du själv kan kontrollera varje
-              uppgift vid källan.
+              till Riksdagens officiella dokument och protokoll så att du själv kan kontrollera
+              varje uppgift vid källan.
             </p>
             <div className="mt-4">
               <Link
@@ -96,8 +105,8 @@ function OmInsikt() {
                 inloggning.
               </li>
               <li>
-                <strong>Privat bevakning:</strong> Dina sparade ledamöter, partier och ärenden sparas
-                lokalt i din egen webbläsare, utan spårning eller profilering.
+                <strong>Privat bevakning:</strong> Dina sparade ledamöter, partier och ärenden
+                sparas lokalt i din egen webbläsare, utan spårning eller profilering.
               </li>
             </ul>
           </section>
@@ -106,7 +115,8 @@ function OmInsikt() {
             <h2 className="text-xl font-normal">Hittat något som inte stämmer?</h2>
             <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
               Vi strävar efter absolut korrekthet. Om du upptäcker ett fel i en sammanfattning, en
-              ämneskoppling eller visningen av en votering uppskattar vi om du rapporterar det till oss.
+              ämneskoppling eller visningen av en votering uppskattar vi om du rapporterar det till
+              oss.
             </p>
             <div className="mt-5">
               <Link

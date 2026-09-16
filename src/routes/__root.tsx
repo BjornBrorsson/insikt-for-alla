@@ -188,6 +188,9 @@ function Footer() {
           <Link to="/om-insikt" className="hover:underline">
             Om Insikt
           </Link>
+          <Link to="/neutralitet" className="hover:underline">
+            Neutralitet &amp; oberoende
+          </Link>
           <Link to="/kallor-och-metod" className="hover:underline">
             Källor &amp; metod
           </Link>
