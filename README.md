@@ -1,6 +1,6 @@
 # Insikt: Sveriges Riksdag
 
-Här är en prompt som instruerar Lovable att bygga hela Insikt, med kompletteringar som valkretsvyer, jämförelser, bevakning och tydligare beslutsförklaringar.
+Insikt är en svensk civikinformatikplattform som gör riksdagens arbete begripligt för allmänheten. Nedan följer den ursprungliga produktspecifikationen.
 
 
 
@@ -557,16 +557,6 @@ Om externa tjänster kräver konfiguration eller inloggningsuppgifter, bygg fär
 
 
 Målet är en användbar och trovärdig demokratiplattform som gör det enkelt att gå från en fråga om svensk politik till ett begripligt, verifierbart svar.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/9d4e6ad4-0a13-46f7-b350-838d2340f485).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
 ## Development
 

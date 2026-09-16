@@ -61,6 +61,21 @@ function ren(obj) {
 }
 
 let skrivna = 0;
+
+/** Skriver stora dokument (aggregeringsmatriser) ett och ett – en batch
+ *  med flera hundra-KB-docs spräcker Firestores 10 MB-transaktionsgräns. */
+async function skrivStora(samling, poster) {
+  const PARALLELLA = 8;
+  for (let i = 0; i < poster.length; i += PARALLELLA) {
+    await Promise.all(
+      poster
+        .slice(i, i + PARALLELLA)
+        .map((p) => db.collection(samling).doc(String(p.id)).set(ren(p.data), { merge: true })),
+    );
+    skrivna += Math.min(PARALLELLA, poster.length - i);
+  }
+}
+
 async function skrivBatch(samling, poster) {
   for (let i = 0; i < poster.length; i += 450) {
     const batch = db.batch();
@@ -84,6 +99,18 @@ async function supaSida(tabell, offset, extra = "") {
     throw new Error(`${tabell}: ${res.status} ${text.slice(0, 200)}`);
   }
   return res.json();
+}
+
+/** Exakt radantal i en tabell via PostgREST count. */
+async function supaAntal(tabell) {
+  const res = await fetch(`${SUPA_URL}/rest/v1/${tabell}?select=votering_id&limit=0`, {
+    headers: {
+      apikey: SUPA_KEY,
+      Authorization: `Bearer ${SUPA_KEY}`,
+      Prefer: "count=exact",
+    },
+  });
+  return Number((res.headers.get("content-range") ?? "").split("/")[1]) || 0;
 }
 
 /** Hämtar alla rader i en tabell (sidvis). */
@@ -265,38 +292,45 @@ for (const p of partitotaler) {
   majoritetKarta.set(`${p.votering_id}|${p.parti}`, majoritet(p));
 }
 
-/* ----- roster (strömmas sidvis) + matriser -------------------------- */
+/* ----- roster (pagineras per votering_id) + matriser ---------------- */
 
-// Matriser byggs alltid om från hela roster-strömmen så att en
-// återupptagen körning ändå får kompletta aggregat.
+// Varken OFFSET- eller or()-keyset-paginering fungerar mot Supabase här:
+// båda tvingar Postgres att skanna hela tabellen per sida och timeoutar.
+// roster.votering_id är indexerad FK – en equality-fråga per votering
+// (~350 rader) är konstant billig. Matriser byggs alltid om från hela
+// strömmen så att en återupptagen körning får kompletta aggregat.
 const matriser = new Map(); // ledamot_id -> {vid: post}
 const rostPerParti = new Map(); // `${vid}|${parti}` -> {Ja,Nej,Avstår,Frånvarande}
 const skrivRoster = !klar("roster");
-let rosterTotalt = state.rosterOffset ?? 0;
+// Alla rader för voteringar med id <= detta är redan skrivna.
+let skrivenVid = state.rosterSkrivenVid ?? "";
+// UUID-sortering är lexikografisk – samma ordning som strängsort.
+const voteringsIdn = [...voteringMeta.keys()].sort();
 
-let offset = 0;
-for (;;) {
-  const sida = await supaSida("roster", offset, "&order=votering_id,ledamot_id");
-  if (sida.length === 0) break;
+let lasta = 0;
+for (const id of voteringsIdn) {
+  const rader = await supaAllt("roster", `&votering_id=eq.${encodeURIComponent(id)}&order=ledamot_id`);
   const poster = [];
-  for (const r of sida) {
+  for (const r of rader) {
     const meta = voteringMeta.get(r.votering_id) ?? {};
     const maj = r.parti ? (majoritetKarta.get(`${r.votering_id}|${r.parti}`) ?? null) : null;
-    poster.push({
-      id: `${r.votering_id}|${r.ledamot_id}`,
-      data: {
-        ...r,
-        datum: meta.datum ?? null,
-        arende_id: meta.arende_id ?? null,
-        organ: meta.organ ?? null,
-        titel: meta.titel ?? null,
-        rubrik: meta.rubrik ?? null,
-        beteckning: meta.beteckning ?? null,
-        punkt: meta.punkt ?? null,
-        sakfragor: meta.sakfragor ?? [],
-        partimajoritet: maj,
-      },
-    });
+    if (skrivRoster && id >= skrivenVid) {
+      poster.push({
+        id: `${r.votering_id}|${r.ledamot_id}`,
+        data: {
+          ...r,
+          datum: meta.datum ?? null,
+          arende_id: meta.arende_id ?? null,
+          organ: meta.organ ?? null,
+          titel: meta.titel ?? null,
+          rubrik: meta.rubrik ?? null,
+          beteckning: meta.beteckning ?? null,
+          punkt: meta.punkt ?? null,
+          sakfragor: meta.sakfragor ?? [],
+          partimajoritet: maj,
+        },
+      });
+    }
     const m = matriser.get(r.ledamot_id) ?? {};
     m[r.votering_id] = {
       rost: r.rost,
@@ -314,17 +348,22 @@ for (;;) {
     if (c[r.rost] !== undefined) c[r.rost] += 1;
     rostPerParti.set(pk, c);
   }
-  if (skrivRoster && offset >= rosterTotalt) {
+  if (poster.length > 0) {
     await skrivBatch("roster", poster);
-    rosterTotalt = offset + sida.length;
-    state.rosterOffset = rosterTotalt;
-    sparaState();
   }
-  offset += sida.length;
-  process.stdout.write(`\rroster: ${offset}`);
-  if (sida.length < SIDA) break;
+  skrivenVid = id;
+  state.rosterSkrivenVid = id;
+  sparaState();
+  lasta += rader.length;
+  process.stdout.write(`\rroster: ${lasta}`);
 }
-console.log(`\nroster klart (${offset})`);
+// Kontroll: varnade rader vars votering_id saknas i voteringar hade
+// missats av per-votering-pagineringen.
+const forvantat = await supaAntal("roster");
+console.log(`\nroster klart (${lasta} lästa, förväntat ${forvantat})`);
+if (lasta !== forvantat) {
+  console.warn("VARNING: roster-antalet stämmer inte – kontrollera föräldralösa votering_id!");
+}
 if (skrivRoster) markeraKlar("roster");
 
 /* ----- partitotaler med majoritet + enligt --------------------------- */
@@ -375,13 +414,13 @@ if (!klar("matriser")) {
     };
     partiMajoriteter.set(p.parti, m);
   }
-  await skrivBatch(
+  await skrivStora(
     "partimajoriteter",
     [...partiMajoriteter.entries()].map(([parti, poster]) => ({ id: parti, data: { poster } })),
   );
   console.log("partimajoriteter klart");
 
-  await skrivBatch(
+  await skrivStora(
     "rostmatriser",
     [...matriser.entries()].map(([lid, poster]) => ({ id: lid, data: { poster } })),
   );
@@ -429,7 +468,7 @@ await db
       uppdrag: uppdrag.length,
       ledamoter: ledamoter.length,
       partitotaler: partitotaler.length,
-      roster: offset,
+      roster: lasta,
     },
   });
 
