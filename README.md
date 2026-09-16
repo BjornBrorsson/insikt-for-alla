@@ -99,5 +99,6 @@ i linje med projektets neutralitetsprincip.
 Koden licensieras under **EUPL-1.2** (European Union Public Licence). EUPL är
 EU:s officiella licens för öppen programvara: den är copyleft, täcker även
 nätverksanvändning (tjänster) och är kompatibel med GPL/AGPL och flera andra
-licenser. Den svenska licenstexten – som är en av EUPL:s 23 officiella
-språkversioner – finns i [`LICENSE`](LICENSE).
+licenser. Licenstexten finns på engelska i [`LICENSE`](LICENSE) och på svenska
+i [`LICENS.sv`](LICENS.sv) – båda är officiella EUPL-1.2-versioner (EUT L 128,
+19.5.2017, CELEX 32017D0863) med samma rättsverkan.
