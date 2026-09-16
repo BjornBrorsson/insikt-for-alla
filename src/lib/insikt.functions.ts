@@ -666,12 +666,18 @@ export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
       throw fel;
     }
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // ignoreDuplicates: om två besökare triggar generering samtidigt vinner den första.
-    const { error } = await supabaseAdmin
-      .from("ai_voteringssammanfattningar")
-      .upsert({ votering_id: data.id, ...genererad }, { onConflict: "votering_id", ignoreDuplicates: true });
-    if (error) console.error("[Insikt] Kunde inte spara voteringssammanfattning:", error.message);
+    // Cachelagring är bästa-effort: saknas service key eller tabellen ska
+    // sammanfattningen ändå visas (den regenereras bara vid nästa besök).
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      // ignoreDuplicates: om två besökare triggar generering samtidigt vinner den första.
+      const { error } = await supabaseAdmin
+        .from("ai_voteringssammanfattningar")
+        .upsert({ votering_id: data.id, ...genererad }, { onConflict: "votering_id", ignoreDuplicates: true });
+      if (error) throw error;
+    } catch (fel) {
+      console.error("[Insikt] Kunde inte spara voteringssammanfattning:", fel instanceof Error ? fel.message : fel);
+    }
 
     const { data: slutlig } = await db
       .from("ai_voteringssammanfattningar")
