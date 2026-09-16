@@ -11,6 +11,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { KostnadDonationWidget } from "@/components/insikt/kostnad-donation-widget";
 
 const NAV = [
   { to: "/ledamoter", text: "Ledamöter" },
@@ -220,6 +221,7 @@ function Footer() {
           </a>
         </div>
       </div>
+      <KostnadDonationWidget />
     </footer>
   );
 }

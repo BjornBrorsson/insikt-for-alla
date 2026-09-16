@@ -2343,3 +2343,99 @@ export const getValkretsVsRiksdagen = createServerFn({ method: "GET" })
       sakfragedata,
     };
   });
+
+/* ------------------------------------------------------------------ */
+/* Driftkostnader & Transparens                                        */
+/* ------------------------------------------------------------------ */
+
+export type TjanstKostnad = {
+  namn: string;
+  beskrivning: string;
+  kostnadKr: number;
+  arInomFreeTier: boolean;
+};
+
+export type DriftkostnaderData = {
+  manad: string;
+  infrastrukturKostnadKr: number;
+  doneratKr: number;
+  tackningsgradProcent: number;
+  tjanster: TjanstKostnad[];
+  meddelande: string;
+};
+
+export const getDriftkostnader = createServerFn({ method: "GET" }).handler(
+  async (): Promise<DriftkostnaderData> => {
+    const db = await fsDb();
+    let docData: Partial<DriftkostnaderData> = {};
+
+    try {
+      const snap = await db.collection("system_meta").doc("kostnader").get();
+      if (snap.exists) {
+        docData = snap.data() as Partial<DriftkostnaderData>;
+      }
+    } catch {
+      // Standardfall om dokumentet inte finns i Firestore
+    }
+
+    const datumNu = new Date();
+    const manadNamn = datumNu.toLocaleDateString("sv-SE", {
+      month: "long",
+      year: "numeric",
+    });
+    const capitalizedManad = manadNamn.charAt(0).toUpperCase() + manadNamn.slice(1);
+
+    const standardTjanster: TjanstKostnad[] = [
+      {
+        namn: "Google Cloud Run (Server)",
+        beskrivning: "Serverprocessen för Insikt i europe-north1.",
+        kostnadKr: 15,
+        arInomFreeTier: true,
+      },
+      {
+        namn: "Google Cloud Firestore (Databas)",
+        beskrivning: "Native NoSQL-databas för voteringar, ledamöter och matriser.",
+        kostnadKr: 20,
+        arInomFreeTier: false,
+      },
+      {
+        namn: "Firebase Hosting & CDN",
+        beskrivning: "Globalt CDN för snabb sidinläsning och SSL.",
+        kostnadKr: 0,
+        arInomFreeTier: true,
+      },
+      {
+        namn: "Google Gemini Flash Lite API",
+        beskrivning: "AI-sammanfattningar av voteringar.",
+        kostnadKr: 10,
+        arInomFreeTier: true,
+      },
+      {
+        namn: "Cloud Build & Artifact Registry",
+        beskrivning: "Automatiska byggen och container-register.",
+        kostnadKr: 5,
+        arInomFreeTier: true,
+      },
+    ];
+
+    const tjanster = docData.tjanster ?? standardTjanster;
+    const infrastrukturKostnadKr =
+      docData.infrastrukturKostnadKr ?? tjanster.reduce((sum, t) => sum + t.kostnadKr, 0);
+    const doneratKr = docData.doneratKr ?? 0;
+    const tackningsgradProcent =
+      infrastrukturKostnadKr > 0
+        ? Math.min(Math.round((doneratKr / infrastrukturKostnadKr) * 100), 100)
+        : 100;
+
+    return {
+      manad: docData.manad ?? capitalizedManad,
+      infrastrukturKostnadKr,
+      doneratKr,
+      tackningsgradProcent,
+      tjanster,
+      meddelande:
+        docData.meddelande ??
+        "Insikt drivs ideellt utan vinstintresse eller partistöd. Alla donationer går oavkortat till server- och driftkostnader.",
+    };
+  },
+);
