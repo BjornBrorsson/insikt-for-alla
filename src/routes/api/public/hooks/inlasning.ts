@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 
 /**
  * Schemalagd inläsning från Riksdagens öppna data.
- * Anropas av jobbet i Lovable Cloud och kräver den delade hemligheten.
+ * Anropas av Cloud Scheduler (insikt-inlasning-*) och kräver den delade hemligheten
+ * (INGEST_SECRET, lagrad som CRON_SECRET i Secret Manager).
  */
 export const Route = createFileRoute("/api/public/hooks/inlasning")({
   server: {
