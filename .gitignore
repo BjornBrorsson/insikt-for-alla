@@ -40,3 +40,4 @@ dist-ssr
 .firebase/
 firebase-debug.log
 scripts/.migrering-state.json
+NUL

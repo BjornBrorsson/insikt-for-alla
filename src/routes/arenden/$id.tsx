@@ -50,7 +50,7 @@ function ArendeDetalj() {
     );
   }
 
-  const { arende, punkter, voteringar, amnen, sammanfattning, relaterade } = query.data;
+  const { arende, punkter, voteringar, amnen, sammanfattning, anforanden, relaterade } = query.data;
 
   return (
     <div>
@@ -63,6 +63,9 @@ function ArendeDetalj() {
             <Kalla url={arende.kalla_url_html} text="Öppna betänkandet hos Riksdagen (HTML)" />
             {arende.kalla_url_text ? (
               <Kalla url={arende.kalla_url_text} text="Ladda ner fulltext" />
+            ) : null}
+            {arende.debatt_url ? (
+              <Kalla url={arende.debatt_url} text="Se debatten i webb-tv" />
             ) : null}
           </div>
         }
@@ -148,6 +151,82 @@ function ArendeDetalj() {
             </div>
           )}
         </section>
+
+        {/* Debatt om ärendet */}
+        {anforanden.length > 0 ? (
+          <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-xl font-normal">
+                Debatt i kammaren ({anforanden.length} anföranden)
+              </h2>
+              {arende.debatt_url ? (
+                <a
+                  href={arende.debatt_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-[var(--accent-insikt)] underline"
+                >
+                  Hela debatten i webb-tv ↗
+                </a>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Vem som talade i debatten om ärendet, i talarordning. Länkarna startar Riksdagens
+              webb-tv vid respektive inlägg när startpositionen är känd.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm">
+              {anforanden.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border/60 pb-2 last:border-0"
+                >
+                  <span className="w-8 text-xs text-muted-foreground">{a.nummer ?? "–"}</span>
+                  {a.ledamot_id ? (
+                    <Link
+                      to="/ledamoter/$id"
+                      params={{ id: a.ledamot_id }}
+                      className="font-medium hover:underline"
+                    >
+                      {a.talare ?? a.ledamot_id}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{a.talare ?? "Okänd talare"}</span>
+                  )}
+                  {a.parti ? (
+                    <span className="text-xs text-muted-foreground">({a.parti})</span>
+                  ) : null}
+                  {a.replik ? <span className="text-xs text-muted-foreground">replik</span> : null}
+                  <span className="ml-auto flex gap-3 text-xs">
+                    {a.video_url ? (
+                      <a
+                        href={a.video_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-foreground"
+                      >
+                        Se inlägget i webb-tv ↗
+                      </a>
+                    ) : null}
+                    {a.protokoll_url_www ? (
+                      <a
+                        href={a.protokoll_url_www}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground underline hover:text-foreground"
+                      >
+                        Protokoll ↗
+                      </a>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-muted-foreground italic">
+              Källa: Sveriges riksdag. Ett anförande visar vad som sades i debatten – det visar inte
+              orsaken till hur ledamoten röstade.
+            </p>
+          </section>
+        ) : null}
 
         {/* Beslutspunkter och tillhörande voteringar */}
         <section className="rounded-xl border border-border bg-card p-6 shadow-xs">

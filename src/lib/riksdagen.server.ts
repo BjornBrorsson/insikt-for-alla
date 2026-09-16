@@ -582,3 +582,168 @@ export async function ingestRiksmote(rm: string, max = 25): Promise<IngestResult
     throw e;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Anföranden i debatter + länkar till Riksdagen-TV                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Hämtar debattsidan på Riksdagen webb-tv för ett ärende (rel_dok_id).
+ * URL:en kan skrivas med valfri slug före "_<dokid>" – servern svarar
+ * med en redirect till den kanoniska sidan. Sidan bäddar in varje
+ * anförandes startposition i sekunder, ordnat efter anförandenummer.
+ */
+async function hamtaDebattVideo(
+  relDokId: string,
+): Promise<{ url: string; positioner: Map<string, number[]> } | null> {
+  try {
+    const res = await fetch(
+      `https://www.riksdagen.se/sv/webb-tv/video/debatt-om-forslag/_${relDokId.toLowerCase()}/`,
+      { redirect: "follow" },
+    );
+    if (!res.ok || !res.url.includes("/webb-tv/")) return null;
+    const html = await res.text();
+    const positioner = new Map<string, number[]>();
+    const re = /stakeholderId2":"(\d+)","startPosition":(\d+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html))) {
+      const iid = m[1]!;
+      const pos = Number.parseInt(m[2]!, 10);
+      positioner.set(iid, [...(positioner.get(iid) ?? []), pos]);
+    }
+    return { url: res.url.split("?")[0]!, positioner };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Läser in de senaste ärendedebatt-anförandena till samlingen `anforanden`.
+ * anforandelistan saknar paginering – `sz` anger hur många av de senaste
+ * som hämtas (redan inlästa hoppas över). För ärenden som finns inlästa
+ * hämtas även debattsidan på webb-tv så att varje anförande får en
+ * direktlänk med startposition (?pos=) när matchningen är entydig.
+ */
+export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestResult> {
+  const startad = new Date().toISOString();
+  try {
+    const db = await fsDb();
+    const data = await getJson(
+      `${BASE}/anforandelista/?anftyp=debatt&utformat=json&sz=${sz}` +
+        (rm ? `&rm=${encodeURIComponent(rm)}` : ""),
+    );
+    const lista = (data["anforandelista"] ?? {}) as Json;
+    const rader = asArray(lista["anforande"] as Json | Json[]);
+
+    const ids = rader.map((r) => str(r["anforande_id"])).filter((x): x is string => !!x);
+    const befintliga = new Set(
+      ids.length === 0
+        ? []
+        : (await db.getAll(...ids.map((id) => db.collection("anforanden").doc(id))))
+            .filter((s) => s.exists)
+            .map((s) => s.id),
+    );
+    const nya = rader.filter((r) => {
+      const id = str(r["anforande_id"]);
+      return !!id && !befintliga.has(id);
+    });
+
+    // Webb-tv-sida per berört ärende (rel_dok_id = ärendets dokid).
+    const relIds = [
+      ...new Set(nya.map((r) => str(r["rel_dok_id"])).filter((x): x is string => !!x)),
+    ];
+    const videoPerArende = new Map<string, { url: string; positioner: Map<string, number[]> }>();
+    for (const relId of relIds) {
+      const video = await hamtaDebattVideo(relId);
+      if (video) videoPerArende.set(relId, video);
+    }
+
+    // Matcha webb-tv:s startpositioner mot anförandena per ledamot:
+    // i:te inlägget för ledamoten i debatten ↔ i:te positionen för samma
+    // ledamot på videosidan. Matchningen sker bara när antalen är lika –
+    // annars lagras debattlänken utan startposition (heller inget än fel).
+    const videoUrlPerAnforande = new Map<string, string>();
+    for (const [relId, video] of videoPerArende) {
+      const debattens = nya
+        .filter((r) => str(r["rel_dok_id"]) === relId)
+        .sort((a, b) => (toInt(a["anforande_nummer"]) ?? 0) - (toInt(b["anforande_nummer"]) ?? 0));
+      const perLedamot = new Map<string, Json[]>();
+      for (const r of debattens) {
+        const iid = str(r["intressent_id"]);
+        if (!iid) continue;
+        perLedamot.set(iid, [...(perLedamot.get(iid) ?? []), r]);
+      }
+      for (const [iid, anforanden] of perLedamot) {
+        const pos = video.positioner.get(iid) ?? [];
+        if (pos.length !== anforanden.length) continue;
+        anforanden.forEach((r, i) => {
+          const id = str(r["anforande_id"]);
+          if (id && pos[i] !== undefined)
+            videoUrlPerAnforande.set(id, `${video.url}?pos=${pos[i]}&autoplay=true`);
+        });
+      }
+    }
+
+    const nu = new Date().toISOString();
+    const poster = nya.map((r) => {
+      const id = str(r["anforande_id"])!;
+      const relId = str(r["rel_dok_id"]);
+      const video = relId ? videoPerArende.get(relId) : undefined;
+      return {
+        id,
+        data: {
+          id,
+          arende_id: relId,
+          ledamot_id: str(r["intressent_id"]),
+          talare: str(r["talare"]),
+          parti: str(r["parti"]),
+          nummer: toInt(r["anforande_nummer"]),
+          replik: str(r["replik"]) === "Y",
+          rubrik: str(r["avsnittsrubrik"]),
+          underrubrik: str(r["underrubrik"]),
+          kammaraktivitet: str(r["kammaraktivitet"]),
+          protokoll_dok_id: str(r["dok_id"]),
+          datum: toDate(r["dok_datum"]),
+          protokoll_url_www: str(r["protokoll_url_www"]),
+          debatt_url: video?.url ?? null,
+          video_url: videoUrlPerAnforande.get(id) ?? video?.url ?? null,
+          systemdatum: str(r["systemdatum"]),
+          uppdaterad: nu,
+        },
+      };
+    });
+    const skrivna = await fsSkrivManga("anforanden", poster);
+
+    // Denormalisera debattlänk + antal anföranden till ärenden som finns inlästa.
+    const antalPerArende = new Map<string, number>();
+    for (const r of nya) {
+      const relId = str(r["rel_dok_id"]);
+      if (relId) antalPerArende.set(relId, (antalPerArende.get(relId) ?? 0) + 1);
+    }
+    for (const [relId, antal] of antalPerArende) {
+      const arende = await db.collection("arenden").doc(relId).get();
+      if (!arende.exists) continue;
+      const tidigare = (arende.data()?.["antal_anforanden"] as number | undefined) ?? 0;
+      const video = videoPerArende.get(relId);
+      await db
+        .collection("arenden")
+        .doc(relId)
+        .set(
+          {
+            debatt_url: video?.url ?? arende.data()?.["debatt_url"] ?? null,
+            antal_anforanden: tidigare + antal,
+            uppdaterad: nu,
+          },
+          { merge: true },
+        );
+    }
+
+    const detalj = `${skrivna} nya anföranden (${rader.length} lästa), video för ${videoPerArende.size} debatter, ${videoUrlPerAnforande.size} direktlänkar med startposition.`;
+    await logRun("anforanden", "lyckad", skrivna, detalj, rm ?? null, startad);
+    return { typ: "anforanden", antal: skrivna, detalj };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logRun("anforanden", "misslyckad", 0, msg, rm ?? null, startad);
+    throw e;
+  }
+}

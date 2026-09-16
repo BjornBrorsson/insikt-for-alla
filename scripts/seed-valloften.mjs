@@ -26,7 +26,13 @@ const env = Object.fromEntries(
     .filter((l) => l && !l.startsWith("#") && l.includes("="))
     .map((l) => {
       const i = l.indexOf("=");
-      return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^"|"$/g, "")];
+      return [
+        l.slice(0, i).trim(),
+        l
+          .slice(i + 1)
+          .trim()
+          .replace(/^"|"$/g, ""),
+      ];
     }),
 );
 
@@ -53,11 +59,19 @@ const V = {
   nu18p5: "42649c95-87b8-488a-9c91-728844978620", // Det kommunala vetot och vindkraft
 };
 
-const manifest = (p, namn) => ({
-  titel: `${namn} valmanifest 2022`,
-  url: `https://snd.se/sv/vivill/file/${p}/v/2022/txt`,
+const manifest = (p, namn, ar = 2022) => ({
+  titel: `${namn} valmanifest ${ar}`,
+  url: `https://snd.se/sv/vivill/file/${p}/v/${ar}/txt`,
   utgivare: `${namn}, via SND:s Vivill-arkiv`,
-  val_ar: 2022,
+  val_ar: ar,
+  mandatperiod:
+    ar === 2022
+      ? "2022-2026"
+      : ar === 2018
+        ? "2018-2022"
+        : ar === 2014
+          ? "2014-2018"
+          : `${ar}-${ar + 4}`,
 });
 
 /* relation: direkt | delvis | relaterad.
@@ -166,9 +180,7 @@ const LOFTEN = [
         votering_id: V.fiu48p1,
         relation: "direkt",
         riktning: "Ja",
-        forklaringar: [
-          "Beslutet omfattade även el- och gasprisstöd, inte bara drivmedelsskatten.",
-        ],
+        forklaringar: ["Beslutet omfattade även el- och gasprisstöd, inte bara drivmedelsskatten."],
       },
       {
         votering_id: V.sku15p2,
@@ -315,8 +327,7 @@ const LOFTEN = [
   {
     id: "sd-karnkraft",
     parti: "SD",
-    lofte:
-      "Säkra tillgången till pålitlig och billig el genom satsningar på framtidens kärnkraft.",
+    lofte: "Säkra tillgången till pålitlig och billig el genom satsningar på framtidens kärnkraft.",
     sakfragor: ["energi"],
     kalla: manifest("sd", "Sverigedemokraternas"),
     kopplingar: [
@@ -355,8 +366,7 @@ const LOFTEN = [
   {
     id: "l-medborgarskapskrav",
     parti: "L",
-    lofte:
-      "Vi ska helt enkelt ställa höga krav på den som vill bli svensk medborgare.",
+    lofte: "Vi ska helt enkelt ställa höga krav på den som vill bli svensk medborgare.",
     sakfragor: ["migration"],
     kalla: manifest("l", "Liberalernas"),
     kopplingar: [
@@ -478,12 +488,256 @@ const LOFTEN = [
       },
     ],
   },
+
+  /* ================================================================= */
+  /* MANDATPERIODEN 2018–2022 (Valmanifest 2018 ur SND:s ViVill-arkiv)   */
+  /* ================================================================= */
+  {
+    id: "s-poliser-straff-2018",
+    parti: "S",
+    mandatperiod: "2018-2022",
+    lofte:
+      "10 000 fler polisanställda till 2024 och skärpta straff för gängkriminalitet och vapenbrott.",
+    sakfragor: ["lag-och-ordning"],
+    kalla: manifest("s", "Socialdemokraternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "s-valfarden-forst-2018",
+    parti: "S",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Inga skattesänkningar på välfärdens bekostnad – resurserna ska gå till sjukvården, skolan och äldreomsorgen.",
+    sakfragor: ["vard", "skola"],
+    kalla: manifest("s", "Socialdemokraternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "m-sankta-skatter-jobb-2018",
+    parti: "M",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Sänka skatten på arbete med ett förstärkt jobbskatteavdrag och sänkt skatt för pensionärer.",
+    sakfragor: ["ekonomi"],
+    kalla: manifest("m", "Moderaternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "m-karnkraft-bevaras-2018",
+    parti: "M",
+    mandatperiod: "2018-2022",
+    lofte: "Bevara och utveckla kärnkraften som ryggraden i svensk fossilfri elförsörjning.",
+    sakfragor: ["energi"],
+    kalla: manifest("m", "Moderaternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "sd-minska-asylinvandring-2018",
+    parti: "SD",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Kraftigt minskad asylinvandring till EU:s absoluta miniminivå och skärpta krav för anhöriginvandring.",
+    sakfragor: ["migration"],
+    kalla: manifest("sd", "Sverigedemokraternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "sd-skarpta-straff-livstid-2018",
+    parti: "SD",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Avskaffa straffrabatter och införa verkliga livstidsstraff utan möjlighet till tidsbestämning för grova brottslingar.",
+    sakfragor: ["lag-och-ordning"],
+    kalla: manifest("sd", "Sverigedemokraternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "v-vinststopp-valfard-2018",
+    parti: "V",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Ett generellt förbud mot vinstuttag ur skola, vård och omsorg – skattepengar ska gå till verksamheten.",
+    sakfragor: ["skola", "vard"],
+    kalla: manifest("v", "Vänsterpartiets", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "v-sex-timmars-arbetsdag-2018",
+    parti: "V",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Förkorta arbetstiden mot sex timmars arbetsdag med bibehållen lön för att minska stress och ohälsa.",
+    sakfragor: ["arbetsmarknad"],
+    kalla: manifest("v", "Vänsterpartiets", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "c-ingangsavdrag-jobb-2018",
+    parti: "C",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Införa ett ingångsavdrag som gör de tre första årens anställning för unga och nyanlända helt skattefria upp till en viss inkomst.",
+    sakfragor: ["arbetsmarknad", "ekonomi"],
+    kalla: manifest("c", "Centerpartiets", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "c-gron-skattevaxling-2018",
+    parti: "C",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Genomföra en grön skatteväxling: sänka skatten på jobb och företagande och höja skatten på utsläpp och miljöskadlig verksamhet.",
+    sakfragor: ["miljo", "ekonomi"],
+    kalla: manifest("c", "Centerpartiets", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "kd-forstatliga-sjukvarden-2018",
+    parti: "KD",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Avskaffa landstingen och förstatliga sjukhusvården för en jämlik vård med korta köer i hela landet.",
+    sakfragor: ["vard"],
+    kalla: manifest("kd", "Kristdemokraternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "kd-aldreboendegaranti-2018",
+    parti: "KD",
+    mandatperiod: "2018-2022",
+    lofte: "Införa en lagstadgad äldreboendegaranti för alla över 85 år.",
+    sakfragor: ["aldre"],
+    kalla: manifest("kd", "Kristdemokraternas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "l-kunskapsskola-forstatliga-2018",
+    parti: "L",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Återförstatliga skolan så att alla elever får en likvärdig kunskapsskola oavsett var i landet de bor.",
+    sakfragor: ["skola"],
+    kalla: manifest("l", "Liberalernas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "l-sprakkrav-medborgarskap-2018",
+    parti: "L",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Införa krav på godkända kunskaper i svenska språket och grundläggande samhällskunskap för att bli svensk medborgare.",
+    sakfragor: ["migration"],
+    kalla: manifest("l", "Liberalernas", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "mp-fornybar-energi-2018",
+    parti: "MP",
+    mandatperiod: "2018-2022",
+    lofte:
+      "Mål om 100 procent förnybar energi och ett slutdatum för försäljning av nya bensin- och dieselbilar senast 2030.",
+    sakfragor: ["klimat", "energi"],
+    kalla: manifest("mp", "Miljöpartiets", 2018),
+    kopplingar: [],
+  },
+  {
+    id: "mp-jarnvag-stambanor-2018",
+    parti: "MP",
+    mandatperiod: "2018-2022",
+    lofte: "Massiva investeringar i järnvägen och byggande av nya stambanor för höghastighetståg.",
+    sakfragor: ["infrastruktur"],
+    kalla: manifest("mp", "Miljöpartiets", 2018),
+    kopplingar: [],
+  },
+
+  /* ================================================================= */
+  /* MANDATPERIODEN 2014–2018 (Valmanifest 2014 ur SND:s ViVill-arkiv)   */
+  /* ================================================================= */
+  {
+    id: "s-lagsta-arbetslosheten-2014",
+    parti: "S",
+    mandatperiod: "2014-2018",
+    lofte:
+      "Sverige ska nå EU:s lägsta arbetslöshet till år 2020 genom aktiva investeringar i jobb, utbildning och infrastruktur.",
+    sakfragor: ["arbetsmarknad"],
+    kalla: manifest("s", "Socialdemokraternas", 2014),
+    kopplingar: [],
+  },
+  {
+    id: "m-overskottsmal-jobb-2014",
+    parti: "M",
+    mandatperiod: "2014-2018",
+    lofte:
+      "Upprätthålla ordning och reda i statens finanser med överskottsmål och ytterligare jobbskatteavdrag.",
+    sakfragor: ["ekonomi"],
+    kalla: manifest("m", "Moderaternas", 2014),
+    kopplingar: [],
+  },
+  {
+    id: "sd-minska-invandringen-90-2014",
+    parti: "SD",
+    mandatperiod: "2014-2018",
+    lofte:
+      "Minska asyl- och anhöriginvandringen med 90 procent och prioritera resurserna till välfärdens kärna.",
+    sakfragor: ["migration", "vard"],
+    kalla: manifest("sd", "Sverigedemokraternas", 2014),
+    kopplingar: [],
+  },
+  {
+    id: "v-inte-till-salu-2014",
+    parti: "V",
+    mandatperiod: "2014-2018",
+    lofte:
+      "Stoppa vinsterna i välfärden och införa krav på kollektivavtalsenliga villkor vid alla offentliga upphandlingar.",
+    sakfragor: ["skola", "vard"],
+    kalla: manifest("v", "Vänsterpartiets", 2014),
+    kopplingar: [],
+  },
+  {
+    id: "mp-stang-reaktorer-2014",
+    parti: "MP",
+    mandatperiod: "2014-2018",
+    lofte:
+      "Stänga minst två kärnkraftsreaktorer under mandatperioden och ersätta med förnybar sol- och vindenergi.",
+    sakfragor: ["energi", "klimat"],
+    kalla: manifest("mp", "Miljöpartiets", 2014),
+    kopplingar: [],
+  },
+  {
+    id: "c-fornybar-energi-landsbygd-2014",
+    parti: "C",
+    mandatperiod: "2014-2018",
+    lofte: "Underlätta för företagande på landsbygden och sänka arbetsgivaravgifterna för unga.",
+    sakfragor: ["arbetsmarknad", "landsbygd"],
+    kalla: manifest("c", "Centerpartiets", 2014),
+    kopplingar: [],
+  },
+  {
+    id: "kd-vardgaranti-familj-2014",
+    parti: "KD",
+    mandatperiod: "2014-2018",
+    lofte: "Stärka vårdgarantin och värna familjernas fria val genom att behålla vårdnadsbidraget.",
+    sakfragor: ["vard", "familj"],
+    kalla: manifest("kd", "Kristdemokraternas", 2014),
+    kopplingar: [],
+  },
+  {
+    id: "l-betyg-arskurs-4-2014",
+    parti: "L",
+    mandatperiod: "2014-2018",
+    lofte:
+      "Införa betyg från årskurs 4 och fler undervisningstimmar i grundskolan för högre kunskapsresultat.",
+    sakfragor: ["skola"],
+    kalla: manifest("l", "Liberalernas", 2014),
+    kopplingar: [],
+  },
 ];
 
-/* Kontrollera att alla voteringar finns innan vi skriver. */
+/* Kontrollera att alla angivna voteringar finns innan vi skriver. */
 const saknade = [];
 for (const l of LOFTEN) {
   for (const k of l.kopplingar) {
+    if (!k.votering_id) continue;
     const snap = await db.collection("voteringar").doc(k.votering_id).get();
     if (!snap.exists) saknade.push(`${l.id}: ${k.votering_id}`);
   }
@@ -497,7 +751,8 @@ const batch = db.batch();
 const nu = new Date().toISOString();
 for (const l of LOFTEN) {
   const ref = db.collection("valloften").doc(l.id);
-  batch.set(ref, { ...l, uppdaterad: nu });
+  const mandatperiod = l.mandatperiod || l.kalla?.mandatperiod || "2022-2026";
+  batch.set(ref, { ...l, mandatperiod, uppdaterad: nu });
 }
 await batch.commit();
 console.log(`Skrev ${LOFTEN.length} vallöften.`);

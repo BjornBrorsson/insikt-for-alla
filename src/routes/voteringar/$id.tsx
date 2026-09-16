@@ -59,7 +59,7 @@ function VoteringDetalj() {
     );
   }
 
-  const { votering, partitotaler, majoritet, roster } = query.data;
+  const { votering, partitotaler, majoritet, roster, anforanden } = query.data;
 
   const beslutsAnalys = analyseraBeslut({
     forslag: votering.beslutspunkter?.forslag,
@@ -322,6 +322,68 @@ function VoteringDetalj() {
             </table>
           </div>
         </section>
+
+        {/* Debatt om ärendet */}
+        {anforanden.length > 0 ? (
+          <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
+            <h2 className="text-xl font-normal">Debatt om ärendet</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Anföranden i kammarens debatt om ärendet, i talarordning. Länkarna går till Riksdagens
+              webb-tv och startar uppspelningen vid respektive inlägg.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm">
+              {anforanden.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border/60 pb-2 last:border-0"
+                >
+                  <span className="w-8 text-xs text-muted-foreground">{a.nummer ?? "–"}</span>
+                  {a.ledamot_id ? (
+                    <Link
+                      to="/ledamoter/$id"
+                      params={{ id: a.ledamot_id }}
+                      className="font-medium hover:underline"
+                    >
+                      {a.talare ?? a.ledamot_id}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{a.talare ?? "Okänd talare"}</span>
+                  )}
+                  {a.parti ? (
+                    <span className="text-xs text-muted-foreground">({a.parti})</span>
+                  ) : null}
+                  {a.replik ? <span className="text-xs text-muted-foreground">replik</span> : null}
+                  <span className="ml-auto flex gap-3 text-xs">
+                    {a.video_url ? (
+                      <a
+                        href={a.video_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-foreground"
+                      >
+                        Se inlägget i webb-tv ↗
+                      </a>
+                    ) : null}
+                    {a.protokoll_url_www ? (
+                      <a
+                        href={a.protokoll_url_www}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground underline hover:text-foreground"
+                      >
+                        Protokoll ↗
+                      </a>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-muted-foreground italic">
+              Källa: Sveriges riksdag. Ett anförande i debatten visar vad som sades vid tillfället –
+              det visar inte orsaken till hur ledamoten röstade.
+            </p>
+          </section>
+        ) : null}
 
         {/* Individuell röstlängd */}
         <section className="rounded-xl border border-border bg-card p-6 shadow-xs">

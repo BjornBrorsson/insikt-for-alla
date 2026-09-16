@@ -18,9 +18,8 @@ export const Route = createFileRoute("/api/public/hooks/inlasning")({
           });
         }
 
-        const { ingestLedamoter, ingestRiksmote, AKTUELLT_RM } = await import(
-          "@/lib/riksdagen.server"
-        );
+        const { ingestAnforanden, ingestLedamoter, ingestRiksmote, AKTUELLT_RM } =
+          await import("@/lib/riksdagen.server");
 
         let body: { typ?: string; rm?: string; max?: number } = {};
         try {
@@ -32,6 +31,15 @@ export const Route = createFileRoute("/api/public/hooks/inlasning")({
         try {
           if (body.typ === "ledamoter") {
             const r = await ingestLedamoter("tjanstgorande");
+            return Response.json(r);
+          }
+          if (body.typ === "anforanden") {
+            const r = await ingestAnforanden(body.max ?? 500, body.rm);
+            return Response.json(r);
+          }
+          if (body.typ === "valloften") {
+            const { synkaValloftenMotVoteringar } = await import("@/lib/valloften-synk.server");
+            const r = await synkaValloftenMotVoteringar();
             return Response.json(r);
           }
           const r = await ingestRiksmote(body.rm ?? AKTUELLT_RM, body.max ?? 15);

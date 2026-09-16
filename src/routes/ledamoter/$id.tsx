@@ -59,7 +59,7 @@ function LedamotProfil() {
     );
   }
 
-  const { ledamot, uppdrag, roster, sammanfattning, franvaroKontext } = query.data;
+  const { ledamot, uppdrag, roster, sammanfattning, franvaroKontext, anforanden } = query.data;
   const namn = ledamotsnamn(ledamot);
 
   const totalt =
@@ -245,6 +245,69 @@ function LedamotProfil() {
                 </EgenBerakning>
               </div>
             </section>
+
+            {/* Anföranden i kammarens debatter */}
+            {anforanden.length > 0 ? (
+              <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
+                <h2 className="text-xl font-normal">Anföranden i kammaren</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Debattinlägg ledamoten hållit, senaste först. Länkarna går till Riksdagens webb-tv
+                  och startar vid respektive inlägg när startpositionen är känd.
+                </p>
+                <ul className="mt-4 space-y-3 text-sm">
+                  {anforanden.map((a) => (
+                    <li
+                      key={a.id}
+                      className="rounded-lg border border-border/80 bg-background p-3.5"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted-foreground">
+                        <span>{datum(a.datum)}</span>
+                        {a.replik ? <span>Replik</span> : null}
+                      </div>
+                      {a.arende_id ? (
+                        <Link
+                          to="/arenden/$id"
+                          params={{ id: a.arende_id }}
+                          className="mt-1 block font-medium text-foreground hover:underline"
+                        >
+                          {a.rubrik ?? a.arende_id}
+                        </Link>
+                      ) : (
+                        <p className="mt-1 font-medium text-foreground">
+                          {a.rubrik ?? "Anförande"}
+                        </p>
+                      )}
+                      <div className="mt-2 flex gap-4 text-xs">
+                        {a.video_url ? (
+                          <a
+                            href={a.video_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[var(--accent-insikt)] underline"
+                          >
+                            Se inlägget i webb-tv ↗
+                          </a>
+                        ) : null}
+                        {a.protokoll_url_www ? (
+                          <a
+                            href={a.protokoll_url_www}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground underline hover:text-foreground"
+                          >
+                            Protokoll ↗
+                          </a>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs text-muted-foreground italic">
+                  Källa: Sveriges riksdag. Visar de senaste inläggen som hittats i Riksdagens
+                  anförandelista.
+                </p>
+              </section>
+            ) : null}
 
             {/* Voteringshistorik */}
             <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
