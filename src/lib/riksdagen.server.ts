@@ -646,9 +646,11 @@ export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestRes
       return !!id && !befintliga.has(id);
     });
 
-    // Webb-tv-sida per berört ärende (rel_dok_id = ärendets dokid).
+    // Webb-tv-sida per berört ärende (rel_dok_id = ärendets dokid). Hela
+    // fönstret – inte bara nya – så att även poster som lästes in innan
+    // videon publicerades kan få sin startposition i efterhand.
     const relIds = [
-      ...new Set(nya.map((r) => str(r["rel_dok_id"])).filter((x): x is string => !!x)),
+      ...new Set(rader.map((r) => str(r["rel_dok_id"])).filter((x): x is string => !!x)),
     ];
     const videoPerArende = new Map<string, { url: string; positioner: Map<string, number[]> }>();
     for (const relId of relIds) {
@@ -685,7 +687,7 @@ export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestRes
     }
 
     const nu = new Date().toISOString();
-    const poster = nya.map((r) => {
+    const poster: { id: string; data: Record<string, unknown> }[] = nya.map((r) => {
       const id = str(r["anforande_id"])!;
       const relId = str(r["rel_dok_id"]);
       const video = relId ? videoPerArende.get(relId) : undefined;
@@ -712,15 +714,40 @@ export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestRes
         },
       };
     });
+
+    // Påfyllning: redan inlästa anföranden som saknar videolänk får den
+    // nu om matchningen lyckats (t.ex. om videon publicerats först senare).
+    const snapPerId = new Map(befintligaSnaps.map((s) => [s.id, s]));
+    for (const r of rader) {
+      const id = str(r["anforande_id"]);
+      if (!id || !befintliga.has(id)) continue;
+      const sparad = snapPerId.get(id);
+      if (!sparad || sparad.data()?.["video_url"]) continue;
+      const relId = str(r["rel_dok_id"]);
+      const video = relId ? videoPerArende.get(relId) : undefined;
+      const videoUrl = videoUrlPerAnforande.get(id) ?? video?.url ?? null;
+      if (!videoUrl) continue;
+      poster.push({
+        id,
+        data: {
+          debatt_url: video?.url ?? null,
+          video_url: videoUrl,
+          uppdaterad: nu,
+        },
+      });
+    }
+
     const skrivna = await fsSkrivManga("anforanden", poster);
 
     // Denormalisera debattlänk + antal anföranden till ärenden som finns inlästa.
+    // debatt_url sätts även för ärenden vars anföranden lästes in tidigare.
     const antalPerArende = new Map<string, number>();
     for (const r of nya) {
       const relId = str(r["rel_dok_id"]);
       if (relId) antalPerArende.set(relId, (antalPerArende.get(relId) ?? 0) + 1);
     }
-    for (const [relId, antal] of antalPerArende) {
+    const berordaArenden = new Set([...antalPerArende.keys(), ...videoPerArende.keys()]);
+    for (const relId of berordaArenden) {
       const arende = await db.collection("arenden").doc(relId).get();
       if (!arende.exists) continue;
       const tidigare = (arende.data()?.["antal_anforanden"] as number | undefined) ?? 0;
@@ -731,7 +758,7 @@ export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestRes
         .set(
           {
             debatt_url: video?.url ?? arende.data()?.["debatt_url"] ?? null,
-            antal_anforanden: tidigare + antal,
+            antal_anforanden: tidigare + (antalPerArende.get(relId) ?? 0),
             uppdaterad: nu,
           },
           { merge: true },
