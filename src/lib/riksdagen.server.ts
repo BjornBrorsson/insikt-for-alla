@@ -570,6 +570,10 @@ export async function ingestRiksmote(rm: string, max = 25): Promise<IngestResult
     }
 
     const detalj = `${kandidater.length} nya ärenden, ${voteringar} voteringar${fel ? `, ${fel} misslyckade ärenden` : ""}. Kvar att läsa in för ${rm}: ${Math.max(0, dokument.length - kanda.size - kandidater.length)}.`;
+    if (voteringar > 0) {
+      const { byggAvvikelseOchSplittring } = await import("./aggregat.server");
+      await byggAvvikelseOchSplittring(db);
+    }
     await logRun("arenden", "lyckad", kandidater.length, detalj, rm, startad);
     return { typ: "arenden", antal: kandidater.length, detalj };
   } catch (e) {

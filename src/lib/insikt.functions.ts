@@ -1590,3 +1590,120 @@ export const getMotion = createServerFn({ method: "GET" })
       return null;
     }
   });
+
+/* ------------------------------------------------------------------ */
+/* Avvikelser & partisplittringar (förberäknade aggregat)              */
+/* ------------------------------------------------------------------ */
+
+const PER_SIDA = 50;
+
+export const getAvvikelser = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        parti: z.string().default(""),
+        sakfraga: z.string().default(""),
+        sida: z.coerce.number().default(1),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const { fsHämta } = await import("./fs-db.server");
+    const agg = await fsHämta<{
+      poster: {
+        votering_id: string;
+        ledamot_id: string;
+        parti: string | null;
+        rost: string;
+        majoritet: string;
+        datum: string | null;
+        beteckning: string | null;
+        titel: string | null;
+        sakfragor: string[];
+      }[];
+      totalt: number;
+      uppdaterad: string;
+    }>("aggregat", "avvikelser");
+
+    let poster = agg?.poster ?? [];
+    if (data.parti) poster = poster.filter((p) => p.parti === data.parti);
+    if (data.sakfraga) poster = poster.filter((p) => p.sakfragor.includes(data.sakfraga));
+    const totalt = poster.length;
+    const sidPoster = poster.slice((data.sida - 1) * PER_SIDA, data.sida * PER_SIDA);
+
+    const db = await fsDb();
+    const ledamotDocs = await db.getAll(
+      ...sidPoster.map((p) => db.collection("ledamoter").doc(p.ledamot_id)),
+    );
+    const ledamoter = new Map(
+      ledamotDocs
+        .filter((d) => d.exists)
+        .map((d) => {
+          const l = d.data()!;
+          return [
+            d.id,
+            {
+              id: d.id,
+              fornamn: l["fornamn"] as string,
+              efternamn: l["efternamn"] as string,
+              valkrets: (l["valkrets"] as string | null) ?? null,
+              bild_url_liten: (l["bild_url_liten"] as string | null) ?? null,
+            },
+          ];
+        }),
+    );
+
+    return {
+      poster: sidPoster.map((p) => ({ ...p, ledamot: ledamoter.get(p.ledamot_id) ?? null })),
+      totalt,
+      sida: data.sida,
+      perSida: PER_SIDA,
+      uppdaterad: agg?.uppdaterad ?? null,
+    };
+  });
+
+export const getSplittringar = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        parti: z.string().default(""),
+        sakfraga: z.string().default(""),
+        sida: z.coerce.number().default(1),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const { fsHämta } = await import("./fs-db.server");
+    const agg = await fsHämta<{
+      poster: {
+        votering_id: string;
+        parti: string;
+        ja: number;
+        nej: number;
+        avstar: number;
+        avgivna: number;
+        splittring: number;
+        poang: number;
+        majoritetsrost: string | null;
+        datum: string | null;
+        beteckning: string | null;
+        titel: string | null;
+        sakfragor: string[];
+      }[];
+      totalt: number;
+      uppdaterad: string;
+    }>("aggregat", "splittringar");
+
+    let poster = agg?.poster ?? [];
+    if (data.parti) poster = poster.filter((p) => p.parti === data.parti);
+    if (data.sakfraga) poster = poster.filter((p) => p.sakfragor.includes(data.sakfraga));
+    const totalt = poster.length;
+
+    return {
+      poster: poster.slice((data.sida - 1) * PER_SIDA, data.sida * PER_SIDA),
+      totalt,
+      sida: data.sida,
+      perSida: PER_SIDA,
+      uppdaterad: agg?.uppdaterad ?? null,
+    };
+  });
