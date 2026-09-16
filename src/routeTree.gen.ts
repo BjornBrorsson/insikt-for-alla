@@ -17,6 +17,7 @@ import { Route as BevakningarRouteImport } from './routes/bevakningar'
 import { Route as ImporteraRouteImport } from './routes/importera'
 import { Route as JamforRouteImport } from './routes/jamfor'
 import { Route as KallorOchMetodRouteImport } from './routes/kallor-och-metod'
+import { Route as KompassRouteImport } from './routes/kompass'
 import { Route as NeutralitetRouteImport } from './routes/neutralitet'
 import { Route as OmInsiktRouteImport } from './routes/om-insikt'
 import { Route as OrdlistaRouteImport } from './routes/ordlista'
@@ -75,6 +76,11 @@ const JamforRoute = JamforRouteImport.update({
 const KallorOchMetodRoute = KallorOchMetodRouteImport.update({
   id: '/kallor-och-metod',
   path: '/kallor-och-metod',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KompassRoute = KompassRouteImport.update({
+  id: '/kompass',
+  path: '/kompass',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NeutralitetRoute = NeutralitetRouteImport.update({
@@ -186,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/importera': typeof ImporteraRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/kompass': typeof KompassRoute
   '/neutralitet': typeof NeutralitetRoute
   '/om-insikt': typeof OmInsiktRoute
   '/ordlista': typeof OrdlistaRoute
@@ -215,6 +222,7 @@ export interface FileRoutesByTo {
   '/importera': typeof ImporteraRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/kompass': typeof KompassRoute
   '/neutralitet': typeof NeutralitetRoute
   '/om-insikt': typeof OmInsiktRoute
   '/ordlista': typeof OrdlistaRoute
@@ -246,6 +254,7 @@ export interface FileRoutesById {
   '/importera': typeof ImporteraRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
+  '/kompass': typeof KompassRoute
   '/neutralitet': typeof NeutralitetRoute
   '/om-insikt': typeof OmInsiktRoute
   '/ordlista': typeof OrdlistaRoute
@@ -277,6 +286,7 @@ export interface FileRouteTypes {
     | '/importera'
     | '/jamfor'
     | '/kallor-och-metod'
+    | '/kompass'
     | '/neutralitet'
     | '/om-insikt'
     | '/ordlista'
@@ -306,6 +316,7 @@ export interface FileRouteTypes {
     | '/importera'
     | '/jamfor'
     | '/kallor-och-metod'
+    | '/kompass'
     | '/neutralitet'
     | '/om-insikt'
     | '/ordlista'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '/importera'
     | '/jamfor'
     | '/kallor-och-metod'
+    | '/kompass'
     | '/neutralitet'
     | '/om-insikt'
     | '/ordlista'
@@ -367,6 +379,7 @@ export interface RootRouteChildren {
   ImporteraRoute: typeof ImporteraRoute
   JamforRoute: typeof JamforRoute
   KallorOchMetodRoute: typeof KallorOchMetodRoute
+  KompassRoute: typeof KompassRoute
   NeutralitetRoute: typeof NeutralitetRoute
   OmInsiktRoute: typeof OmInsiktRoute
   OrdlistaRoute: typeof OrdlistaRoute
@@ -444,6 +457,13 @@ declare module '@tanstack/react-router' {
       path: '/kallor-och-metod'
       fullPath: '/kallor-och-metod'
       preLoaderRoute: typeof KallorOchMetodRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kompass': {
+      id: '/kompass'
+      path: '/kompass'
+      fullPath: '/kompass'
+      preLoaderRoute: typeof KompassRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/neutralitet': {
@@ -609,6 +629,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImporteraRoute: ImporteraRoute,
   JamforRoute: JamforRoute,
   KallorOchMetodRoute: KallorOchMetodRoute,
+  KompassRoute: KompassRoute,
   NeutralitetRoute: NeutralitetRoute,
   OmInsiktRoute: OmInsiktRoute,
   OrdlistaRoute: OrdlistaRoute,

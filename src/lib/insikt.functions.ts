@@ -5,6 +5,7 @@ import type { DocumentData, Query } from "firebase-admin/firestore";
 import { requireFirebaseAuth } from "@/integrations/firebase/auth";
 
 import { fsAntal, fsDb, fsHämta, fsNyRad, fsUppdatera } from "./fs-db.server";
+import { analyseraBeslut } from "./beslut-analys";
 
 /* ------------------------------------------------------------------ */
 /* Typer                                                              */
@@ -74,6 +75,9 @@ type VoteringDoc = Votering & {
   organ: string | null;
   arende_titel: string | null;
   sakfragor: string[];
+  forslag?: string | null;
+  motforslag_partier?: string | null;
+  motforslag_nummer?: string | null;
 };
 
 type RostDoc = {
@@ -1866,4 +1870,144 @@ export const listValloften = createServerFn({ method: "GET" })
         };
       }),
     }));
+  });
+
+/* ------------------------------------------------------------------ */
+/* Riksdagskompass                                                    */
+/* ------------------------------------------------------------------ */
+
+export type KompassFraga = {
+  id: string;
+  rubrik: string;
+  beteckning: string | null;
+  punkt: string | null;
+  organ: string | null;
+  datum: string | null;
+  gallde: string | null;
+  sakfragor: string[];
+  jaInnebord: { rubrik: string; beskrivning: string };
+  nejInnebord: { rubrik: string; beskrivning: string };
+  partiRoster: Record<string, "Ja" | "Nej" | "Avstår" | null>;
+};
+
+export const getKompassFragor = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        antal: z.number().default(15),
+        sakfraga: z.string().default(""),
+        slumpa: z.boolean().default(false),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const db = await fsDb();
+    let fraga: Query<DocumentData> = db.collection("voteringar");
+    if (data.sakfraga) {
+      fraga = fraga.where("sakfragor", "array-contains", data.sakfraga);
+    }
+
+    const snap = await fraga.get();
+    let rader = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc);
+
+    // Filtrera fram frågor från 2022 och framåt som hade debatt och partioenighet
+    rader = rader.filter((v) => {
+      if (!v.datum || v.datum < "2022-10-01") return false;
+      if (!v.gallde || v.gallde.trim().length < 15) return false;
+      const nej = v.nej ?? 0;
+      const ja = v.ja ?? 0;
+      if (nej < 10 || ja < 10) return false;
+      return true;
+    });
+
+    if (data.slumpa) {
+      for (let i = rader.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [rader[i], rader[j]] = [rader[j]!, rader[i]!];
+      }
+    } else {
+      rader.sort((a, b) => {
+        const diffA = Math.abs((a.ja ?? 0) - (a.nej ?? 0));
+        const diffB = Math.abs((b.ja ?? 0) - (b.nej ?? 0));
+        return diffA - diffB || (b.datum ?? "").localeCompare(a.datum ?? "");
+      });
+    }
+
+    const valda: VoteringDoc[] = [];
+    const seddaFragor = new Set<string>();
+
+    for (const r of rader) {
+      if (valda.length >= data.antal) break;
+      const primarFraga = r.sakfragor?.[0];
+      if (
+        !data.sakfraga &&
+        primarFraga &&
+        seddaFragor.has(primarFraga) &&
+        rader.length > data.antal * 2
+      ) {
+        continue;
+      }
+      if (primarFraga) seddaFragor.add(primarFraga);
+      valda.push(r);
+    }
+
+    if (valda.length < data.antal) {
+      for (const r of rader) {
+        if (valda.length >= data.antal) break;
+        if (!valda.some((v) => v.id === r.id)) {
+          valda.push(r);
+        }
+      }
+    }
+
+    const voteringIds = valda.map((v) => v.id);
+    const partiRosterMap = new Map<string, Record<string, "Ja" | "Nej" | "Avstår" | null>>();
+
+    for (let i = 0; i < voteringIds.length; i += 30) {
+      const chunk = voteringIds.slice(i, i + 30);
+      if (!chunk.length) break;
+      const ptSnap = await db.collection("partitotaler").where("votering_id", "in", chunk).get();
+      for (const d of ptSnap.docs) {
+        const t = d.data() as PartitotalDoc;
+        if (!partiRosterMap.has(t.votering_id)) {
+          partiRosterMap.set(t.votering_id, {});
+        }
+        const m = t.majoritetsrost as "Ja" | "Nej" | "Avstår" | null;
+        partiRosterMap.get(t.votering_id)![t.parti] = m;
+      }
+    }
+
+    const fragor: KompassFraga[] = valda.map((v) => {
+      const analys = analyseraBeslut({
+        forslag: v.forslag,
+        rubrik: v.rubrik ?? v.arende_titel ?? undefined,
+        gallde: v.gallde ?? undefined,
+        motforslag_partier: v.motforslag_partier,
+        motforslag_nummer: v.motforslag_nummer,
+        ja: v.ja,
+        nej: v.nej,
+      });
+
+      return {
+        id: v.id,
+        rubrik: v.rubrik ?? v.arende_titel ?? "Votering",
+        beteckning: v.beteckning ?? null,
+        punkt: v.punkt ?? null,
+        organ: v.organ ?? null,
+        datum: v.datum ?? null,
+        gallde: v.gallde ?? null,
+        sakfragor: v.sakfragor ?? [],
+        jaInnebord: {
+          rubrik: analys.ja.rubrik,
+          beskrivning: analys.ja.beskrivning,
+        },
+        nejInnebord: {
+          rubrik: analys.nej.rubrik,
+          beskrivning: analys.nej.beskrivning,
+        },
+        partiRoster: partiRosterMap.get(v.id) ?? {},
+      };
+    });
+
+    return { fragor };
   });

@@ -16,6 +16,7 @@ const NAV = [
   { to: "/ledamoter", text: "Ledamöter" },
   { to: "/partier", text: "Partier" },
   { to: "/voteringar", text: "Voteringar" },
+  { to: "/kompass", text: "Kompass" },
   { to: "/avvikelser", text: "Avvikelser" },
   { to: "/valloften", text: "Vallöften" },
   { to: "/sakfragor", text: "Sakfrågor" },
