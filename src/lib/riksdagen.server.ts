@@ -636,13 +636,11 @@ export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestRes
     const rader = asArray(lista["anforande"] as Json | Json[]);
 
     const ids = rader.map((r) => str(r["anforande_id"])).filter((x): x is string => !!x);
-    const befintliga = new Set(
+    const befintligaSnaps =
       ids.length === 0
         ? []
-        : (await db.getAll(...ids.map((id) => db.collection("anforanden").doc(id))))
-            .filter((s) => s.exists)
-            .map((s) => s.id),
-    );
+        : await db.getAll(...ids.map((id) => db.collection("anforanden").doc(id)));
+    const befintliga = new Set(befintligaSnaps.filter((s) => s.exists).map((s) => s.id));
     const nya = rader.filter((r) => {
       const id = str(r["anforande_id"]);
       return !!id && !befintliga.has(id);
@@ -662,9 +660,11 @@ export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestRes
     // i:te inlägget för ledamoten i debatten ↔ i:te positionen för samma
     // ledamot på videosidan. Matchningen sker bara när antalen är lika –
     // annars lagras debattlänken utan startposition (heller inget än fel).
+    // Matchningen utgår från hela det hämtade fönstret (rader), inte bara
+    // nya poster – en debatt kan vara delvis inläst sedan tidigare körning.
     const videoUrlPerAnforande = new Map<string, string>();
     for (const [relId, video] of videoPerArende) {
-      const debattens = nya
+      const debattens = rader
         .filter((r) => str(r["rel_dok_id"]) === relId)
         .sort((a, b) => (toInt(a["anforande_nummer"]) ?? 0) - (toInt(b["anforande_nummer"]) ?? 0));
       const perLedamot = new Map<string, Json[]>();
