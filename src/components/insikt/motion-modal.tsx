@@ -51,7 +51,7 @@ export function TextMedMotioner({
     if (match.index > sistaIndex) {
       segment.push(renText.slice(sistaIndex, match.index));
     }
-    segment.push({ beteckning: match[1] });
+    segment.push({ beteckning: match[1] ?? match[0] });
     sistaIndex = match.index + match[0].length;
   }
 

@@ -1,7 +1,30 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
+
+type SupabaseKlient = SupabaseClient<Database>;
+
 import { publicDb } from "./db.server";
+
+/**
+ * Databasfunktionerna har valfria argument. Tomma värden utesluts helt
+ * istället för att skickas som null, vilket typerna inte tillåter.
+ */
+function period(
+  fran?: string | null,
+  till?: string | null,
+  sakfraga?: string | null,
+): { _fran?: string; _till?: string; _sakfraga?: string } {
+  return {
+    ...(fran ? { _fran: fran } : {}),
+    ...(till ? { _till: till } : {}),
+    ...(sakfraga ? { _sakfraga: sakfraga } : {}),
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Typer                                                              */
@@ -216,9 +239,7 @@ export const getLedamot = createServerFn({ method: "GET" })
         .limit(300),
       db.rpc("ledamot_sammanfattning", {
         _ledamot: data.id,
-        _fran: fran,
-        _till: till,
-        _sakfraga: null,
+        ...period(fran, till),
       }),
     ]);
 
@@ -316,8 +337,8 @@ export const getParti = createServerFn({ method: "GET" })
         .eq("status", "Tjänstgörande riksdagsledamot")
         .order("efternamn")
         .limit(500),
-      db.rpc("parti_sammanhallning", { _parti: data.kod, _fran: fran, _till: till }),
-      db.rpc("parti_likhet", { _parti: data.kod, _fran: fran, _till: till }),
+      db.rpc("parti_sammanhallning", { _parti: data.kod, ...period(fran, till) }),
+      db.rpc("parti_likhet", { _parti: data.kod, ...period(fran, till) }),
       db
         .from("partitotaler")
         .select("ja, nej, avstar, franvarande, voteringar(id, rubrik, beteckning, punkt, datum, gallde, arenden(titel))")
@@ -767,9 +788,7 @@ export const jamforLedamoter = createServerFn({ method: "GET" })
       db.rpc("jamfor_ledamoter", {
         _a: data.a,
         _b: data.b,
-        _fran: data.fran || null,
-        _till: data.till || null,
-        _sakfraga: data.sakfraga || null,
+        ...period(data.fran, data.till, data.sakfraga),
       }),
     ]);
     if (rader.error) throw new Error(rader.error.message);
@@ -812,9 +831,7 @@ export const jamforPartier = createServerFn({ method: "GET" })
     const { data: rader, error } = await db.rpc("jamfor_partier", {
       _a: data.a,
       _b: data.b,
-      _fran: data.fran || null,
-      _till: data.till || null,
-      _sakfraga: data.sakfraga || null,
+      ...period(data.fran, data.till, data.sakfraga),
     });
     if (error) throw new Error(error.message);
     const lista = (rader ?? []) as {
@@ -950,7 +967,20 @@ export const rapporteraFel = createServerFn({ method: "POST" })
 /* Administration                                                     */
 /* ------------------------------------------------------------------ */
 
-export const getAdminData = createServerFn({ method: "GET" }).handler(async () => {
+/** Kastar om den inloggade användaren inte har administratörsrollen. */
+async function kravAdmin(context: { supabase: SupabaseKlient; userId: string }) {
+  const { data, error } = await context.supabase.rpc("has_role", {
+    _user_id: context.userId,
+    _role: "admin",
+  });
+  if (error) throw new Error(error.message);
+  if (data !== true) throw new Error("Behörighet saknas: kräver administratörsroll.");
+}
+
+export const getAdminData = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+  await kravAdmin(context);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const [inlasningar, felrapporter, sammanfattningar] = await Promise.all([
     supabaseAdmin.from("inlasningar").select("*").order("startad", { ascending: false }).limit(30),
@@ -967,9 +997,10 @@ export const getAdminData = createServerFn({ method: "GET" }).handler(async () =
     felrapporter: felrapporter.data ?? [],
     sammanfattningar: sammanfattningar.data ?? [],
   };
-});
+  });
 
 export const uppdateraFelrapport = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -978,7 +1009,8 @@ export const uppdateraFelrapport = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await kravAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("felrapporter")
@@ -989,6 +1021,7 @@ export const uppdateraFelrapport = createServerFn({ method: "POST" })
   });
 
 export const granskaAiSammanfattning = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -998,7 +1031,8 @@ export const granskaAiSammanfattning = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await kravAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const updatePayload: { granskad: boolean; sammanfattning?: string } = {
       granskad: data.granskad,
@@ -1013,6 +1047,7 @@ export const granskaAiSammanfattning = createServerFn({ method: "POST" })
   });
 
 export const korInlasning = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -1022,7 +1057,8 @@ export const korInlasning = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await kravAdmin(context);
     const { ingestLedamoter, ingestRiksmote } = await import("./riksdagen.server");
     if (data.typ === "ledamoter") {
       const res = await ingestLedamoter("tjanstgorande");
@@ -1070,7 +1106,9 @@ const RM_PREFIX: Record<string, string> = {
 function beraknaMotionDokId(bet: string): string | null {
   const m = bet.match(/(\d{4}\/\d{2}):(\d+)/);
   if (!m) return null;
-  const p = RM_PREFIX[m[1]];
+  const rm = m[1];
+  if (!rm) return null;
+  const p = RM_PREFIX[rm];
   if (!p) return null;
   return `${p}02${m[2]}`;
 }

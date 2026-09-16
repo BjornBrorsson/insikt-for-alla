@@ -24,14 +24,14 @@ export interface BeslutsAnalys {
 }
 
 interface AnalysInput {
-  forslag?: string | null;
-  rubrik?: string | null;
-  gallde?: string | null;
-  motforslag_partier?: string | null;
-  motforslag_nummer?: string | null;
-  vinnare?: string | null;
-  ja?: number;
-  nej?: number;
+  forslag?: string | null | undefined;
+  rubrik?: string | null | undefined;
+  gallde?: string | null | undefined;
+  motforslag_partier?: string | null | undefined;
+  motforslag_nummer?: string | null | undefined;
+  vinnare?: string | null | undefined;
+  ja?: number | undefined;
+  nej?: number | undefined;
 }
 
 export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {

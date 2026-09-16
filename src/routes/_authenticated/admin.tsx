@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
@@ -12,9 +12,10 @@ import {
   korInlasning,
 } from "@/lib/insikt.functions";
 import { datum, datumKort, antal } from "@/lib/format";
-import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
+import { Fel, Laddar, Sidhuvud } from "@/components/insikt/tillstand";
+import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/admin")({
+export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
       { title: "Administration — Insikt" },
@@ -25,10 +26,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminVy() {
-  const [inloggad, setInloggad] = useState(false);
-  const [pin, setPin] = useState("");
-  const [pinFel, setPinFel] = useState(false);
-
+  const navigate = useNavigate();
   const hamtaAdmin = useServerFn(getAdminData);
   const hamtaStatus = useServerFn(getDatastatus);
   const uppdateraFel = useServerFn(uppdateraFelrapport);
@@ -38,30 +36,17 @@ function AdminVy() {
   const adminQuery = useQuery({
     queryKey: ["admin-data"],
     queryFn: () => hamtaAdmin(),
-    enabled: inloggad,
   });
 
   const statusQuery = useQuery({
     queryKey: ["admin-status"],
     queryFn: () => hamtaStatus(),
-    enabled: inloggad,
   });
 
   const [korsNu, setKorsNu] = useState(false);
   const [aktivFlik, setAktivFlik] = useState<"status" | "inlasningar" | "felrapporter" | "ai">(
     "status",
   );
-
-  function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    // Enkel administrativ PIN för demonstrations- och driftgranskning
-    if (pin === "insikt2026" || pin === "admin") {
-      setInloggad(true);
-      setPinFel(false);
-    } else {
-      setPinFel(true);
-    }
-  }
 
   async function handleKorInlasning(typ: "ledamoter" | "voteringar") {
     setKorsNu(true);
@@ -95,51 +80,6 @@ function AdminVy() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Kunde inte ändra status.");
     }
-  }
-
-  if (!inloggad) {
-    return (
-      <div>
-        <Sidhuvud
-          rubrik="Administration"
-          lead="Skyddad vy för driftövervakning, inläsningshistorik och hantering av felrapporter."
-        />
-
-        <div className="mx-auto max-w-md px-4 py-16">
-          <form onSubmit={handleLogin} className="rounded-xl border border-border bg-card p-6 shadow-xs">
-            <h2 className="text-xl font-normal">Logga in i administratörsvyn</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Ange administratörslösenordet för att hantera plattformen. (Tips i demo: ange <code>admin</code> eller <code>insikt2026</code>).
-            </p>
-
-            {pinFel ? (
-              <p className="mt-3 text-xs text-destructive">Felaktigt lösenord. Försök igen.</p>
-            ) : null}
-
-            <div className="mt-4">
-              <label htmlFor="admin-pin" className="sr-only">
-                Lösenord
-              </label>
-              <input
-                id="admin-pin"
-                type="password"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="Lösenord …"
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="mt-4 w-full rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Logga in
-            </button>
-          </form>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -194,7 +134,10 @@ function AdminVy() {
 
             <button
               type="button"
-              onClick={() => setInloggad(false)}
+              onClick={async () => {
+                await supabase.auth.signOut();
+                navigate({ to: "/auth" });
+              }}
               className="text-xs text-muted-foreground hover:underline"
             >
               Logga ut
