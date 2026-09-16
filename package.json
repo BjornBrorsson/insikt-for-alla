@@ -1,5 +1,6 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "insikt",
+  "license": "EUPL-1.2",
   "private": true,
   "sideEffects": false,
   "type": "module",
