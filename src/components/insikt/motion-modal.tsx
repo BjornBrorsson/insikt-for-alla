@@ -5,28 +5,32 @@ import { FileText, ExternalLink } from "lucide-react";
 
 import { getMotion, type MotionInfo } from "@/lib/insikt.functions";
 import { datum, rensaHtml } from "@/lib/format";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Laddar } from "@/components/insikt/tillstand";
 import { PartiMarke } from "@/components/insikt/delar";
+import { hittaTerm, skapaTermRegex, type Term } from "@/lib/ordlista";
+import { OrdlistaTerm } from "@/components/insikt/ordlista-term";
+
+type MatchDel =
+  | { type: "motion"; start: number; end: number; beteckning: string }
+  | { type: "term"; start: number; end: number; term: Term; text: string };
 
 /**
  * TextMedMotioner
- * 
- * 1. Rensar alla råa HTML-taggar (<BR/>, <br>, etc.) till snygg text.
+ *
+ * 1. Rensar råa HTML-taggar (<BR/>, <br>, etc.) till ren text.
  * 2. Hittar alla motionsbeteckningar (t.ex. 2025/26:4215 eller 2024/25:123).
- * 3. Gör dem klickbara så att en modal öppnas med motionens innehåll, yrkanden och sammanfattning.
+ * 3. Känner av riksdagstermer och renderar interaktiva förklaringsrutor vid hover/fokus/tap.
+ * 4. Gör motionsbeteckningar klickbara för att öppna modal med motionens yrkanden.
  */
 export function TextMedMotioner({
   text,
   className = "",
+  inkluderaOrdlista = true,
 }: {
   text: string | null | undefined;
   className?: string;
+  inkluderaOrdlista?: boolean;
 }) {
   const [valdMotion, setValdMotion] = useState<string | null>(null);
 
@@ -40,19 +44,67 @@ export function TextMedMotioner({
     .replace(/[ \t]+/g, " ")
     .trim();
 
-  // Regex för att matcha motionsbeteckningar som t.ex. 2025/26:4215 eller 2024/25:12
+  const matches: MatchDel[] = [];
+
+  // 1. Regex för att matcha motionsbeteckningar som t.ex. 2025/26:4215 eller 2024/25:12
   const motionRegex = /\b(\d{4}\/\d{2}:\d+)\b/g;
+  let m: RegExpExecArray | null;
 
-  const segment: (string | { beteckning: string })[] = [];
-  let sistaIndex = 0;
-  let match: RegExpExecArray | null;
+  while ((m = motionRegex.exec(renText)) !== null) {
+    matches.push({
+      type: "motion",
+      start: m.index,
+      end: m.index + m[0].length,
+      beteckning: m[1] ?? m[0],
+    });
+  }
 
-  while ((match = motionRegex.exec(renText)) !== null) {
-    if (match.index > sistaIndex) {
-      segment.push(renText.slice(sistaIndex, match.index));
+  // 2. Regex för att matcha ordlistetermer
+  if (inkluderaOrdlista) {
+    const termRegex = skapaTermRegex();
+    const seddaTermer = new Set<string>();
+
+    while ((m = termRegex.exec(renText)) !== null) {
+      const matchStart = m.index;
+      const matchEnd = m.index + m[0].length;
+      const matchText = m[1] ?? m[0];
+      const hittad = hittaTerm(matchText);
+      if (!hittad) continue;
+
+      // Visa bara första förekomsten av samma term i detta stycke så att texten inte blir plottrig
+      if (seddaTermer.has(hittad.slug)) continue;
+
+      // Undvik överlapp med motionslänkar eller tidigare matchningar
+      const krockar = matches.some(
+        (mat) =>
+          (matchStart >= mat.start && matchStart < mat.end) ||
+          (matchEnd > mat.start && matchEnd <= mat.end),
+      );
+      if (krockar) continue;
+
+      seddaTermer.add(hittad.slug);
+      matches.push({
+        type: "term",
+        start: matchStart,
+        end: matchEnd,
+        term: hittad,
+        text: matchText,
+      });
     }
-    segment.push({ beteckning: match[1] ?? match[0] });
-    sistaIndex = match.index + match[0].length;
+  }
+
+  // Sortera i kronologisk ordning
+  matches.sort((a, b) => a.start - b.start);
+
+  const segment: (string | MatchDel)[] = [];
+  let sistaIndex = 0;
+
+  for (const match of matches) {
+    if (match.start > sistaIndex) {
+      segment.push(renText.slice(sistaIndex, match.start));
+    }
+    segment.push(match);
+    sistaIndex = match.end;
   }
 
   if (sistaIndex < renText.length) {
@@ -66,21 +118,29 @@ export function TextMedMotioner({
           return <span key={i}>{del}</span>;
         }
 
-        return (
-          <button
-            key={i}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setValdMotion(del.beteckning);
-            }}
-            className="inline-flex items-center gap-1 rounded bg-[var(--accent-insikt-svag)] px-1.5 py-0.5 font-mono text-xs font-medium text-[var(--accent-insikt)] hover:bg-[var(--accent-insikt)] hover:text-white transition-colors cursor-pointer mx-1 align-baseline shadow-2xs"
-            title={`Klicka för att läsa motion ${del.beteckning} och dess förslag`}
-          >
-            <FileText className="h-3 w-3 inline" />
-            <span className="underline underline-offset-2">{del.beteckning}</span>
-          </button>
-        );
+        if (del.type === "motion") {
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setValdMotion(del.beteckning);
+              }}
+              className="inline-flex items-center gap-1 rounded bg-[var(--accent-insikt-svag)] px-1.5 py-0.5 font-mono text-xs font-medium text-[var(--accent-insikt)] hover:bg-[var(--accent-insikt)] hover:text-white transition-colors cursor-pointer mx-1 align-baseline shadow-2xs"
+              title={`Klicka för att läsa motion ${del.beteckning} och dess förslag`}
+            >
+              <FileText className="h-3 w-3 inline" />
+              <span className="underline underline-offset-2">{del.beteckning}</span>
+            </button>
+          );
+        }
+
+        if (del.type === "term") {
+          return <OrdlistaTerm key={i} term={del.term} matchadText={del.text} />;
+        }
+
+        return null;
       })}
 
       {valdMotion ? (
@@ -97,8 +157,23 @@ export function TextMedMotioner({
 }
 
 /**
+ * TextMedOrdlista
+ *
+ * Alias för TextMedMotioner med ordlisteförklaringar aktiverade.
+ */
+export function TextMedOrdlista({
+  text,
+  className = "",
+}: {
+  text: string | null | undefined;
+  className?: string;
+}) {
+  return <TextMedMotioner text={text} className={className} inkluderaOrdlista={true} />;
+}
+
+/**
  * MotionModal
- * 
+ *
  * Visar information, yrkanden och sammanfattning av en motion hämtad från data.riksdagen.se
  */
 export function MotionModal({
@@ -136,9 +211,7 @@ export function MotionModal({
           </DialogTitle>
 
           {motion?.titel ? (
-            <p className="text-sm text-muted-foreground text-left italic">
-              {motion.titel}
-            </p>
+            <p className="text-sm text-muted-foreground text-left italic">{motion.titel}</p>
           ) : null}
         </DialogHeader>
 
@@ -170,7 +243,10 @@ export function MotionModal({
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {motion.undertecknare.map((u, i) => (
-                    <span key={i} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-0.5">
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-0.5"
+                    >
                       <PartiMarke kod={u.parti} />
                       <span className="font-medium">{u.namn}</span>
                     </span>
@@ -192,18 +268,14 @@ export function MotionModal({
                       className="rounded-lg border border-border bg-card p-3 text-xs space-y-1"
                     >
                       <div className="flex items-center justify-between font-medium">
-                        <span className="text-[var(--accent-insikt)]">
-                          Yrkande {y.nummer}
-                        </span>
+                        <span className="text-[var(--accent-insikt)]">Yrkande {y.nummer}</span>
                         {y.utskottet ? (
                           <span className="text-muted-foreground">
                             Utskottets ställningstagande: <strong>{y.utskottet}</strong>
                           </span>
                         ) : null}
                       </div>
-                      <p className="text-foreground leading-relaxed">
-                        {y.lydelse}
-                      </p>
+                      <p className="text-foreground leading-relaxed">{y.lydelse}</p>
                     </div>
                   ))}
                 </div>
@@ -213,9 +285,7 @@ export function MotionModal({
             {/* Motivering / Bakgrund */}
             {motion.motivering ? (
               <div>
-                <h3 className="text-base font-medium mb-1.5">
-                  Motivering ur motionen
-                </h3>
+                <h3 className="text-base font-medium mb-1.5">Motivering ur motionen</h3>
                 <div className="rounded-lg border border-border/80 bg-background p-3.5 text-xs leading-relaxed text-muted-foreground max-h-56 overflow-y-auto whitespace-pre-line">
                   {motion.motivering}
                 </div>
@@ -224,9 +294,7 @@ export function MotionModal({
 
             {/* Footer med länk till riksdagen */}
             <div className="flex flex-wrap items-center justify-between border-t border-border pt-4 text-xs">
-              <span className="text-muted-foreground">
-                Datum: {datum(motion.datum)}
-              </span>
+              <span className="text-muted-foreground">Datum: {datum(motion.datum)}</span>
               <a
                 href={motion.kalla_url}
                 target="_blank"

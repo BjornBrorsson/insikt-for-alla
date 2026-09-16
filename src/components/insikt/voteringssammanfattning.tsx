@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { getVoteringsSammanfattning } from "@/lib/insikt.functions";
+import { TextMedMotioner } from "@/components/insikt/motion-modal";
 
 interface Props {
   voteringId: string;
@@ -69,7 +70,9 @@ export function VoteringsSammanfattning({ voteringId }: Props) {
         </div>
       ) : (
         <div className="mt-4 space-y-3 text-sm leading-relaxed text-foreground">
-          <p className="whitespace-pre-line">{query.data.sammanfattning.sammanfattning}</p>
+          <div className="whitespace-pre-line">
+            <TextMedMotioner text={query.data.sammanfattning.sammanfattning} />
+          </div>
 
           {!query.data.sammanfattning.tillrackligt_underlag ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">

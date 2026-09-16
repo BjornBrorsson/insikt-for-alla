@@ -39,7 +39,11 @@ function ArendeDetalj() {
         <Tomt
           rubrik="Ärendet hittades inte"
           text={`Inget riksdagsärende med id ”${id}” finns i databasen.`}
-          barn={<Link to="/voteringar" className="text-sm underline">Tillbaka till voteringar</Link>}
+          barn={
+            <Link to="/voteringar" className="text-sm underline">
+              Tillbaka till voteringar
+            </Link>
+          }
         />
       </div>
     );
@@ -99,7 +103,9 @@ function ArendeDetalj() {
 
           {sammanfattning ? (
             <div className="mt-4 space-y-3 text-sm leading-relaxed text-foreground">
-              <p className="whitespace-pre-line">{sammanfattning.sammanfattning}</p>
+              <div className="whitespace-pre-line">
+                <TextMedMotioner text={sammanfattning.sammanfattning} />
+              </div>
 
               {!sammanfattning.tillrackligt_underlag ? (
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
@@ -109,7 +115,8 @@ function ArendeDetalj() {
 
               <div className="flex flex-wrap items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
                 <span>
-                  Modell: {sammanfattning.modell} · {sammanfattning.granskad ? "Granskad av redaktion" : "Automatgenererad"}
+                  Modell: {sammanfattning.modell} ·{" "}
+                  {sammanfattning.granskad ? "Granskad av redaktion" : "Automatgenererad"}
                 </span>
                 {sammanfattning.underlag_url ? (
                   <a
@@ -126,9 +133,13 @@ function ArendeDetalj() {
           ) : (
             <div className="mt-4 text-sm text-muted-foreground leading-relaxed">
               {arende.undertitel ? (
-                <p className="font-medium text-foreground">{rensaHtml(arende.undertitel)}</p>
+                <p className="font-medium text-foreground">
+                  <TextMedMotioner text={arende.undertitel} />
+                </p>
               ) : (
-                <p>Officiell beskrivning saknas i källdata. Se betänkandets fulltext hos Riksdagen.</p>
+                <p>
+                  Officiell beskrivning saknas i källdata. Se betänkandets fulltext hos Riksdagen.
+                </p>
               )}
             </div>
           )}
@@ -138,11 +149,14 @@ function ArendeDetalj() {
         <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
           <h2 className="text-xl font-normal">Beslutspunkter ({punkter.length})</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Riksdagens kammare tar ställning till varje beslutspunkt separat. Vissa avgörs med acklamation, andra med votering.
+            Riksdagens kammare tar ställning till varje beslutspunkt separat. Vissa avgörs med
+            acklamation, andra med votering.
           </p>
 
           {punkter.length === 0 ? (
-            <p className="mt-4 text-xs text-muted-foreground">Inga separata beslutspunkter registrerade.</p>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Inga separata beslutspunkter registrerade.
+            </p>
           ) : (
             <div className="mt-5 space-y-4">
               {punkter.map((p) => {
@@ -177,7 +191,9 @@ function ArendeDetalj() {
                         Punkt {p.punkt}: {p.rubrik ?? "Beslutspunkt"}
                       </h3>
                       {p.vinnare ? (
-                        <span className={`rounded px-2.5 py-0.5 text-xs font-medium border ${badgeFarg}`}>
+                        <span
+                          className={`rounded px-2.5 py-0.5 text-xs font-medium border ${badgeFarg}`}
+                        >
                           {punktAnalys.utfall?.etikett ?? `Utfall: ${p.vinnare}`}
                         </span>
                       ) : null}
@@ -201,7 +217,8 @@ function ArendeDetalj() {
                     {koppladVotering ? (
                       <div className="mt-3 border-t border-border/60 pt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
                         <span className="text-muted-foreground">
-                          Votering genomförd: Ja {koppladVotering.ja}, Nej {koppladVotering.nej}, Avstår {koppladVotering.avstar}
+                          Votering genomförd: Ja {koppladVotering.ja}, Nej {koppladVotering.nej},
+                          Avstår {koppladVotering.avstar}
                         </span>
                         <Link
                           to="/voteringar/$id"
@@ -234,18 +251,16 @@ function ArendeDetalj() {
                   className="rounded-lg border border-border/80 bg-background p-4 text-sm"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted-foreground">
-                    <span>Punkt {v.punkt} · {datum(v.datum)}</span>
+                    <span>
+                      Punkt {v.punkt} · {datum(v.datum)}
+                    </span>
                     <span className="font-medium text-foreground">
                       {v.vinnare ? `${v.vinnare} vann` : "Utfall saknas"}
                     </span>
                   </div>
 
                   <p className="mt-1 font-medium text-foreground">
-                    <Link
-                      to="/voteringar/$id"
-                      params={{ id: v.id }}
-                      className="hover:underline"
-                    >
+                    <Link to="/voteringar/$id" params={{ id: v.id }} className="hover:underline">
                       {v.rubrik ?? "Votering"}
                     </Link>
                   </p>
@@ -290,9 +305,7 @@ function ArendeDetalj() {
                   <span className="font-mono font-medium text-foreground">
                     {r.beteckning ?? r.id}
                   </span>
-                  <p className="mt-1 line-clamp-2 text-muted-foreground">
-                    {r.titel ?? "Ärende"}
-                  </p>
+                  <p className="mt-1 line-clamp-2 text-muted-foreground">{r.titel ?? "Ärende"}</p>
                   <span className="mt-2 block text-muted-foreground/80">{datum(r.datum)}</span>
                 </Link>
               ))}
