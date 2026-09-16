@@ -59,25 +59,41 @@ type SvarRecord = Record<string, SkuggRostTyp | "HoppaOver">;
 function KompassFragaSammanfattning({
   voteringId,
   initialSammanfattning,
+  bakgrund,
   tillrackligtUnderlag = true,
+  visaUtfall = false,
 }: {
   voteringId: string;
   initialSammanfattning?: string | null | undefined;
+  bakgrund?: string | null | undefined;
   tillrackligtUnderlag?: boolean | undefined;
+  visaUtfall?: boolean | undefined;
 }) {
   const hamtaSammanfattning = useServerFn(getVoteringsSammanfattning);
 
   const query = useQuery({
     queryKey: ["voteringssammanfattning", voteringId],
     queryFn: () => hamtaSammanfattning({ data: { id: voteringId } }),
-    enabled: !initialSammanfattning && Boolean(voteringId),
+    enabled: !initialSammanfattning && !bakgrund && Boolean(voteringId),
     staleTime: Infinity,
     retry: 1,
   });
 
-  const text =
+  const fullText =
     initialSammanfattning ||
     (query.data?.status === "klar" ? query.data.sammanfattning.sammanfattning : null);
+
+  const cleanBakgrund =
+    bakgrund ||
+    (query.data?.status === "klar" ? query.data.sammanfattning.bakgrund : null) ||
+    (fullText
+      ? fullText
+          .split(/\n\s*\n/)
+          .map((s) => s.trim())
+          .filter(Boolean)[0]
+      : null);
+
+  const visadText = visaUtfall ? fullText : cleanBakgrund;
 
   const underlagOkej =
     initialSammanfattning !== null && initialSammanfattning !== undefined
@@ -86,7 +102,7 @@ function KompassFragaSammanfattning({
         ? query.data.sammanfattning.tillrackligt_underlag
         : true;
 
-  if (query.isPending && !initialSammanfattning) {
+  if (query.isPending && !initialSammanfattning && !bakgrund) {
     return (
       <div
         className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 space-y-2 animate-pulse"
@@ -105,7 +121,7 @@ function KompassFragaSammanfattning({
     );
   }
 
-  if (!text) {
+  if (!visadText) {
     return null;
   }
 
@@ -114,7 +130,9 @@ function KompassFragaSammanfattning({
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300">
           <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-          Omröstningen i korthet (AI-sammanfattning)
+          {visaUtfall
+            ? "Omröstningen i korthet & resultat"
+            : "Vad frågan handlar om (AI-sammanfattning)"}
         </span>
         <Link
           to="/voteringar/$id"
@@ -129,7 +147,7 @@ function KompassFragaSammanfattning({
       </div>
 
       <div className="text-xs sm:text-sm leading-relaxed text-foreground space-y-2">
-        {text.split("\n\n").map((stycke, i) => (
+        {visadText.split("\n\n").map((stycke, i) => (
           <p key={i} className="text-foreground/90 leading-relaxed">
             {stycke}
           </p>
@@ -544,6 +562,20 @@ function KompassSida() {
                                       {j.fraga.beteckning}{" "}
                                       {j.fraga.datum ? `· ${datum(j.fraga.datum)}` : ""}
                                     </p>
+                                    {j.fraga.sammanfattning ? (
+                                      <details className="mt-1.5 pl-5.5 text-xs text-muted-foreground">
+                                        <summary className="cursor-pointer text-[11px] font-medium text-purple-700 dark:text-purple-300 hover:underline inline-flex items-center gap-1">
+                                          <span>
+                                            Visa hur omröstningen gick (AI-sammanfattning)
+                                          </span>
+                                        </summary>
+                                        <div className="mt-2 rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 text-[11px] leading-relaxed text-foreground space-y-1.5">
+                                          {j.fraga.sammanfattning.split("\n\n").map((s, idx) => (
+                                            <p key={idx}>{s}</p>
+                                          ))}
+                                        </div>
+                                      </details>
+                                    ) : null}
                                   </div>
 
                                   <div className="flex items-center gap-3 self-start sm:self-center pl-5.5 sm:pl-0 flex-shrink-0">
@@ -660,11 +692,13 @@ function KompassSida() {
                   ) : null}
                 </div>
 
-                {/* AI-sammanfattning i klartext */}
+                {/* AI-sammanfattning i klartext (endast sakfrågebakgrund under frågestadiet så att utfall inte avslöjas) */}
                 <KompassFragaSammanfattning
                   voteringId={aktivFraga.id}
                   initialSammanfattning={aktivFraga.sammanfattning}
+                  bakgrund={aktivFraga.bakgrund}
                   tillrackligtUnderlag={aktivFraga.tillrackligtUnderlag}
+                  visaUtfall={false}
                 />
 
                 {/* Förklaringsboxar vad JA och NEJ innebär */}

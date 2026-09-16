@@ -34,8 +34,23 @@ export interface VoteringsUnderlag {
 
 export interface GenereradSammanfattning {
   sammanfattning: string;
+  bakgrund?: string | undefined;
+  utfall?: string | undefined;
+  betydelse?: string | undefined;
   tillrackligt_underlag: boolean;
   modell: string;
+}
+
+export function extraheraFrageBakgrund(text: string): string {
+  if (!text) return "";
+  const stycken = text
+    .split(/\n\s*\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (stycken.length <= 1) return text;
+  // Det första stycket i Insikts voteringssammanfattningar beskriver vad frågan handlar om i sak.
+  // Resterande stycken beskriver utfall, partiernas röster och vinnare.
+  return stycken[0] || text;
 }
 
 const SYSTEM_INSTRUKTION = `Du är en neutral redaktör på Insikt, en svensk tjänst som gör riksdagens beslut begripliga för vanliga medborgare utan förkunskaper.
@@ -48,18 +63,34 @@ Regler:
 - Använd ENBART uppgifterna i underlaget. Hitta inte på sakinnehåll, siffror, namn eller konsekvenser som inte finns i underlaget.
 - Viktigt att förstå: i riksdagen ställs utskottets förslag alltid som Ja-alternativ. Om utskottet föreslog att avslå ett förslag innebär en Ja-seger att förslaget stoppades. Underlaget anger vad Ja respektive Nej innebar – följ det.
 - Struktur (3 korta stycken, utan rubriker, utan markdown, utan punktlistor):
-  1. Vad handlade omröstningen om? (1–2 meningar)
-  2. Hur gick det? Vem ville vad? Nämn utfallet i siffror (Ja mot Nej) och grovt vilka partier som stod på vilken sida, baserat på partiernas majoritetsröst.
-  3. Vad betyder beslutet i praktiken? Håll dig till vad underlaget faktiskt säger. Om det inte går att säga något säkert, skriv det.
+  1. bakgrund: Vad handlade omröstningen om i sak? (1–2 meningar). NÄMN INTE hur omröstningen gick, vem som vann eller röstsiffror i detta stycke.
+  2. utfall: Hur gick det? Vem ville vad? Nämn utfallet i siffror (Ja mot Nej) och grovt vilka partier som stod på vilken sida, baserat på partiernas majoritetsröst.
+  3. betydelse: Vad betyder beslutet i praktiken? Håll dig till vad underlaget faktiskt säger. Om det inte går att säga något säkert, skriv det.
 - Max cirka 120 ord totalt.
 - Om underlaget är för tunt för att förstå vad frågan gällde (t.ex. saknar beskrivning av vad som röstades om) ska du ändå skriva det som går att säga och sätta tillrackligt_underlag till false.`;
 
 const SVARSSCHEMA = {
   type: "object",
   properties: {
+    bakgrund: {
+      type: "string",
+      description:
+        "Vad omröstningen handlade om i sak (1–2 meningar). NÄMN INTE hur omröstningen gick, vem som vann eller röstsiffror här.",
+    },
+    utfall: {
+      type: "string",
+      description:
+        "Hur omröstningen gick, röstsiffror (Ja mot Nej) och vilka partier som röstade på vilken sida (1–2 meningar).",
+    },
+    betydelse: {
+      type: "string",
+      description:
+        "Vad beslutet innebär i praktiken för samhälle och medborgare utifrån utfallet (1–2 meningar).",
+    },
     sammanfattning: {
       type: "string",
-      description: "Sammanfattningen i klartext, tre korta stycken separerade med blankrad.",
+      description:
+        "Hela sammanfattningen i klartext (bakgrund, utfall och betydelse separerade med blankrad).",
     },
     tillrackligt_underlag: {
       type: "boolean",
@@ -117,7 +148,13 @@ function byggPrompt(u: VoteringsUnderlag): string {
 export async function genereraVoteringssammanfattning(
   u: VoteringsUnderlag,
 ): Promise<GenereradSammanfattning> {
-  const svar = await geminiJson<{ sammanfattning: string; tillrackligt_underlag: boolean }>({
+  const svar = await geminiJson<{
+    sammanfattning: string;
+    bakgrund?: string;
+    utfall?: string;
+    betydelse?: string;
+    tillrackligt_underlag: boolean;
+  }>({
     systemInstruktion: SYSTEM_INSTRUKTION,
     prompt: byggPrompt(u),
     schema: SVARSSCHEMA,
@@ -126,8 +163,15 @@ export async function genereraVoteringssammanfattning(
   const text = svar.sammanfattning?.trim();
   if (!text) throw new Error("Modellen returnerade en tom sammanfattning.");
 
+  const bakgrund = svar.bakgrund?.trim() || extraheraFrageBakgrund(text);
+  const utfall = svar.utfall?.trim();
+  const betydelse = svar.betydelse?.trim();
+
   return {
     sammanfattning: text,
+    bakgrund,
+    utfall,
+    betydelse,
     tillrackligt_underlag: Boolean(svar.tillrackligt_underlag),
     modell: geminiModell(),
   };

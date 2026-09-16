@@ -947,6 +947,9 @@ export const getVotering = createServerFn({ method: "GET" })
 
 export type VoteringsSammanfattning = {
   sammanfattning: string;
+  bakgrund?: string | undefined;
+  utfall?: string | undefined;
+  betydelse?: string | undefined;
   modell: string;
   tillrackligt_underlag: boolean;
   granskad: boolean;
@@ -970,10 +973,29 @@ export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
 
     const sparad = await fsHämta<VoteringsSammanfattning>("ai_voteringssammanfattningar", data.id);
     if (sparad) {
-      const { sammanfattning, modell, tillrackligt_underlag, granskad, skapad } = sparad;
+      const {
+        sammanfattning,
+        bakgrund,
+        utfall,
+        betydelse,
+        modell,
+        tillrackligt_underlag,
+        granskad,
+        skapad,
+      } = sparad;
+      const { extraheraFrageBakgrund } = await import("./voteringssammanfattning.server");
       return {
         status: "klar",
-        sammanfattning: { sammanfattning, modell, tillrackligt_underlag, granskad, skapad },
+        sammanfattning: {
+          sammanfattning,
+          bakgrund: bakgrund || extraheraFrageBakgrund(sammanfattning),
+          utfall,
+          betydelse,
+          modell,
+          tillrackligt_underlag,
+          granskad,
+          skapad,
+        },
       };
     }
 
@@ -1045,7 +1067,7 @@ export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
       await db
         .collection("ai_voteringssammanfattningar")
         .doc(data.id)
-        .set({ votering_id: data.id, ...genererad });
+        .set({ votering_id: data.id, ...genererad, skapad: new Date().toISOString() });
     } catch (fel) {
       console.error(
         "[Insikt] Kunde inte spara voteringssammanfattning:",
@@ -1060,6 +1082,9 @@ export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
       sammanfattning: slutlig
         ? {
             sammanfattning: slutlig.sammanfattning,
+            bakgrund: slutlig.bakgrund || genererad.bakgrund,
+            utfall: slutlig.utfall || genererad.utfall,
+            betydelse: slutlig.betydelse || genererad.betydelse,
             modell: slutlig.modell,
             tillrackligt_underlag: slutlig.tillrackligt_underlag,
             granskad: slutlig.granskad,
@@ -2081,6 +2106,7 @@ export type KompassFraga = {
   gallde: string | null;
   sakfragor: string[];
   sammanfattning: string | null;
+  bakgrund: string | null;
   tillrackligtUnderlag?: boolean;
   jaInnebord: { rubrik: string; beskrivning: string };
   nejInnebord: { rubrik: string; beskrivning: string };
@@ -2188,13 +2214,20 @@ export const getKompassFragor = createServerFn({ method: "GET" })
     }
 
     // Läs in befintliga AI-sammanfattningar från ai_voteringssammanfattningar
-    const aiMap = new Map<string, { sammanfattning: string; tillrackligt_underlag?: boolean }>();
+    const aiMap = new Map<
+      string,
+      { sammanfattning: string; bakgrund?: string; tillrackligt_underlag?: boolean }
+    >();
     if (voteringIds.length > 0) {
       const aiRefs = voteringIds.map((id) => db.collection("ai_voteringssammanfattningar").doc(id));
       const aiSnaps = await db.getAll(...aiRefs);
       for (const snap of aiSnaps) {
         if (snap.exists) {
-          const aiData = snap.data() as { sammanfattning: string; tillrackligt_underlag?: boolean };
+          const aiData = snap.data() as {
+            sammanfattning: string;
+            bakgrund?: string;
+            tillrackligt_underlag?: boolean;
+          };
           if (aiData?.sammanfattning) {
             aiMap.set(snap.id, aiData);
           }
@@ -2222,6 +2255,16 @@ export const getKompassFragor = createServerFn({ method: "GET" })
       });
 
       const aiInfo = aiMap.get(v.id);
+      const fullSammanfattning = aiInfo?.sammanfattning ?? null;
+      // Extrahera första stycket (sakfrågebakgrunden) så att utfall och röstsiffror inte avslöjas under frågestadiet
+      const bakgrund =
+        aiInfo?.bakgrund ??
+        (fullSammanfattning
+          ? (fullSammanfattning
+              .split(/\n\s*\n/)
+              .map((s) => s.trim())
+              .filter(Boolean)[0] ?? null)
+          : null);
 
       return {
         id: v.id,
@@ -2232,7 +2275,8 @@ export const getKompassFragor = createServerFn({ method: "GET" })
         datum: v.datum ?? null,
         gallde: v.gallde ?? null,
         sakfragor: v.sakfragor ?? [],
-        sammanfattning: aiInfo?.sammanfattning ?? null,
+        sammanfattning: fullSammanfattning,
+        bakgrund,
         tillrackligtUnderlag: aiInfo?.tillrackligt_underlag ?? true,
         jaInnebord: {
           rubrik: analys.ja.rubrik,
