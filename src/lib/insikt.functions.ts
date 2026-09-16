@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
 import { publicDb } from "./db.server";
 
 /**
@@ -960,7 +962,20 @@ export const rapporteraFel = createServerFn({ method: "POST" })
 /* Administration                                                     */
 /* ------------------------------------------------------------------ */
 
-export const getAdminData = createServerFn({ method: "GET" }).handler(async () => {
+/** Kastar om den inloggade användaren inte har administratörsrollen. */
+async function kravAdmin(context: { supabase: SupabaseKlient; userId: string }) {
+  const { data, error } = await context.supabase.rpc("has_role", {
+    _user_id: context.userId,
+    _role: "admin",
+  });
+  if (error) throw new Error(error.message);
+  if (data !== true) throw new Error("Behörighet saknas: kräver administratörsroll.");
+}
+
+export const getAdminData = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+  await kravAdmin(context);
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const [inlasningar, felrapporter, sammanfattningar] = await Promise.all([
     supabaseAdmin.from("inlasningar").select("*").order("startad", { ascending: false }).limit(30),
@@ -977,9 +992,10 @@ export const getAdminData = createServerFn({ method: "GET" }).handler(async () =
     felrapporter: felrapporter.data ?? [],
     sammanfattningar: sammanfattningar.data ?? [],
   };
-});
+  });
 
 export const uppdateraFelrapport = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -988,7 +1004,8 @@ export const uppdateraFelrapport = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await kravAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("felrapporter")
@@ -999,6 +1016,7 @@ export const uppdateraFelrapport = createServerFn({ method: "POST" })
   });
 
 export const granskaAiSammanfattning = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -1008,7 +1026,8 @@ export const granskaAiSammanfattning = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await kravAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const updatePayload: { granskad: boolean; sammanfattning?: string } = {
       granskad: data.granskad,
@@ -1023,6 +1042,7 @@ export const granskaAiSammanfattning = createServerFn({ method: "POST" })
   });
 
 export const korInlasning = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z
       .object({
@@ -1032,7 +1052,8 @@ export const korInlasning = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await kravAdmin(context);
     const { ingestLedamoter, ingestRiksmote } = await import("./riksdagen.server");
     if (data.typ === "ledamoter") {
       const res = await ingestLedamoter("tjanstgorande");
