@@ -3,6 +3,22 @@ import { z } from "zod";
 
 import { publicDb } from "./db.server";
 
+/**
+ * Databasfunktionerna har valfria argument. Tomma värden utesluts helt
+ * istället för att skickas som null, vilket typerna inte tillåter.
+ */
+function period(
+  fran?: string | null,
+  till?: string | null,
+  sakfraga?: string | null,
+): { _fran?: string; _till?: string; _sakfraga?: string } {
+  return {
+    ...(fran ? { _fran: fran } : {}),
+    ...(till ? { _till: till } : {}),
+    ...(sakfraga ? { _sakfraga: sakfraga } : {}),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Typer                                                              */
 /* ------------------------------------------------------------------ */
