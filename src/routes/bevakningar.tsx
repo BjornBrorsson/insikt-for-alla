@@ -3,21 +3,24 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Vote } from "lucide-react";
 
-import { useBevakningar, type BevakningsTyp } from "@/lib/bevakningar";
+import { useProfil, type SkuggRostTyp } from "@/lib/profil";
+import type { BevakningsTyp } from "@/lib/bevakningar";
 import { getBevakadeHandelser } from "@/lib/insikt.functions";
 import { datum, ledamotsnamn } from "@/lib/format";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { LedamotKort, PartiMarke, RostDiagram } from "@/components/insikt/delar";
+import { ProfilExportImport } from "@/components/insikt/profil-export-import";
 
 export const Route = createFileRoute("/bevakningar")({
   head: () => ({
     meta: [
-      { title: "Mina bevakningar — Insikt" },
+      { title: "Mina bevakningar & skuggröster — Insikt" },
       {
         name: "description",
         content:
-          "Ditt personliga flöde med ledamöter, partier och sakfrågor du bevakar i Sveriges riksdag. Sparas tryggt och privat i din webbläsare.",
+          "Ditt personliga flöde med ledamöter, partier, sakfrågor och skuggröster i Sveriges riksdag. Sparas tryggt och privat i din webbläsare.",
       },
     ],
   }),
@@ -25,9 +28,19 @@ export const Route = createFileRoute("/bevakningar")({
 });
 
 function BevakningarSida() {
-  const { bevakningar, laddad, vaxla, rensa, antal } = useBevakningar();
+  const {
+    bevakningar,
+    laddad,
+    vaxlaBevakning: vaxla,
+    rensaAllt,
+    antalBevakningar,
+    skuggroster,
+    taBortSkuggrost,
+    antalSkuggroster,
+  } = useProfil();
+
   const hamtaHandelser = useServerFn(getBevakadeHandelser);
-  const [aktivFlik, setAktivFlik] = useState<"flode" | "sparade">("flode");
+  const [aktivFlik, setAktivFlik] = useState<"flode" | "sparade" | "skuggroster">("flode");
 
   const query = useQuery({
     queryKey: ["bevakade-handelser", bevakningar],
@@ -41,16 +54,18 @@ function BevakningarSida() {
           voteringar: bevakningar.voteringar,
         },
       }),
-    enabled: laddad && antal > 0,
+    enabled: laddad && antalBevakningar > 0,
   });
+
+  const totaltAntal = antalBevakningar + antalSkuggroster;
 
   return (
     <div>
       <Sidhuvud
-        rubrik="Mina bevakningar"
-        lead="Följ ledamöter, partier och frågor som är viktiga för dig. Allt sparas helt privat i din egen webbläsare — inget konto krävs."
+        rubrik="Mina bevakningar & skuggröster"
+        lead="Följ ledamöter, partier och frågor som är viktiga för dig och spara dina skuggröster. Allt sparas helt privat i din egen webbläsare — inget konto krävs."
         barn={
-          antal > 0 ? (
+          totaltAntal > 0 ? (
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex rounded-md border border-input bg-background p-1 text-sm">
                 <button
@@ -73,16 +88,31 @@ function BevakningarSida() {
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  Hantera sparade ({antal})
+                  Bevakningar ({antalBevakningar})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAktivFlik("skuggroster")}
+                  className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                    aktivFlik === "skuggroster"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Skuggröster ({antalSkuggroster})
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={() => {
-                  if (confirm("Är du säker på att du vill ta bort alla dina sparade bevakningar?")) {
-                    rensa();
-                    toast("Alla bevakningar togs bort.");
+                  if (
+                    confirm(
+                      "Är du säker på att du vill ta bort alla dina sparade bevakningar och skuggröster?",
+                    )
+                  ) {
+                    rensaAllt();
+                    toast("All lokal profildata togs bort.");
                   }
                 }}
                 className="text-xs text-muted-foreground hover:text-destructive underline"
@@ -97,7 +127,7 @@ function BevakningarSida() {
       <div className="mx-auto max-w-6xl px-4 py-10">
         {!laddad ? (
           <Laddar text="Laddar dina bevakningar …" />
-        ) : antal === 0 ? (
+        ) : totaltAntal === 0 ? (
           <Tomt
             rubrik="Du har inga aktiva bevakningar"
             text="Klicka på knappen ”☆ Följ” när du besöker en ledamot, ett parti, en sakfråga eller ett ärende. Då dyker uppdateringar och omröstningar upp här i ditt personliga flöde."
@@ -129,15 +159,20 @@ function BevakningarSida() {
             <div className="mb-6 flex items-baseline justify-between">
               <h2 className="text-2xl font-normal">Aktuellt för det du följer</h2>
               <span className="text-xs text-muted-foreground">
-                Baserat på {antal} bevakade objekt
+                Baserat på {antalBevakningar} bevakade objekt
               </span>
             </div>
 
-            {query.isPending ? (
+            {antalBevakningar === 0 ? (
+              <Tomt
+                rubrik="Du har inga aktiva bevakningar"
+                text="Följ ledamöter, partier eller sakfrågor för att se ett personligt händelseflöde här."
+              />
+            ) : query.isPending ? (
               <Laddar text="Hämtar aktuella voteringar och händelser …" />
             ) : query.isError ? (
               <Fel fel={query.error} forsokIgen={() => query.refetch()} />
-            ) : query.data!.flode.length === 0 ? (
+            ) : query.data?.flode.length === 0 ? (
               <Tomt
                 rubrik="Inga nya omröstningar just nu"
                 text="Det har inte registrerats några nya voteringar för dina bevakade ämnen under den senaste perioden."
@@ -199,15 +234,13 @@ function BevakningarSida() {
               </div>
             )}
           </div>
-        ) : (
+        ) : aktivFlik === "sparade" ? (
           /* Sparade objekt */
           <div className="space-y-10">
             {/* Ledamöter */}
             {query.data && query.data.ledamoter.length > 0 ? (
               <section>
-                <h3 className="text-xl font-normal">
-                  Ledamöter ({query.data.ledamoter.length})
-                </h3>
+                <h3 className="text-xl font-normal">Ledamöter ({query.data.ledamoter.length})</h3>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {query.data.ledamoter.map((l) => (
                     <div key={l.id} className="relative group">
@@ -228,9 +261,7 @@ function BevakningarSida() {
             {/* Partier */}
             {bevakningar.partier.length > 0 ? (
               <section>
-                <h3 className="text-xl font-normal">
-                  Partier ({bevakningar.partier.length})
-                </h3>
+                <h3 className="text-xl font-normal">Partier ({bevakningar.partier.length})</h3>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {bevakningar.partier.map((p) => (
                     <div
@@ -261,9 +292,7 @@ function BevakningarSida() {
             {/* Sakfrågor */}
             {bevakningar.sakfragor.length > 0 ? (
               <section>
-                <h3 className="text-xl font-normal">
-                  Sakfrågor ({bevakningar.sakfragor.length})
-                </h3>
+                <h3 className="text-xl font-normal">Sakfrågor ({bevakningar.sakfragor.length})</h3>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {bevakningar.sakfragor.map((s) => (
                     <div
@@ -365,7 +394,93 @@ function BevakningarSida() {
               </section>
             ) : null}
           </div>
-        )}
+        ) : aktivFlik === "skuggroster" ? (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+              <div>
+                <h2 className="text-2xl font-normal">Mina skuggröster</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Här samlas alla omröstningar du har tagit ställning till. Sparas enbart lokalt i
+                  din webbläsare.
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground bg-muted/60 px-2.5 py-1 rounded-md">
+                Totalt {antalSkuggroster} röstade omröstningar
+              </span>
+            </div>
+
+            {antalSkuggroster === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-[var(--yta)] p-8 text-center space-y-3">
+                <Vote className="mx-auto h-8 w-8 text-muted-foreground" />
+                <p className="font-medium text-foreground">
+                  Du har inte skuggröstat i några omröstningar än
+                </p>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  När du öppnar en votering kan du svara på hur du själv skulle ha röstat (Ja, Nej
+                  eller Avstår). Då sparas din röst anonymt här och du kan jämföra dig mot
+                  partierna.
+                </p>
+                <div className="pt-2">
+                  <Link
+                    to="/voteringar"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs"
+                  >
+                    Utforska aktuella voteringar →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {Object.entries(skuggroster).map(([voteringId, minRost]) => (
+                  <div
+                    key={voteringId}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 shadow-2xs transition-shadow hover:shadow-xs"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          Votering {voteringId}
+                        </span>
+                        <span
+                          className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                            minRost === "Ja"
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                              : minRost === "Nej"
+                                ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30"
+                                : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                          }`}
+                        >
+                          Din röst: {minRost}
+                        </span>
+                      </div>
+                      <Link
+                        to="/voteringar/$id"
+                        params={{ id: voteringId }}
+                        className="text-sm font-medium hover:underline text-foreground block"
+                      >
+                        Öppna omröstningen och granska kammarens utfall →
+                      </Link>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        taBortSkuggrost(voteringId);
+                        toast("Skuggröst borttagen.");
+                      }}
+                      className="text-xs text-muted-foreground hover:text-destructive underline self-start sm:self-center cursor-pointer"
+                    >
+                      Ta bort röst
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* Profil Export / Import / Dela */}
+        <ProfilExportImport className="mt-12" />
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import { TextMedMotioner } from "@/components/insikt/motion-modal";
 import { analyseraBeslut } from "@/lib/beslut-analys";
 import { RostGuideKlartext, BeslutsUtfallKlartext } from "@/components/insikt/beslut-forklaring";
 import { VoteringsSammanfattning } from "@/components/insikt/voteringssammanfattning";
+import { SkuggRostaKort } from "@/components/insikt/skuggrosta";
 
 export const Route = createFileRoute("/voteringar/$id")({
   head: ({ params }) => ({
@@ -48,7 +49,11 @@ function VoteringDetalj() {
         <Tomt
           rubrik="Voteringen hittades inte"
           text={`Ingen omröstning med id ”${id}” kunde hittas i databasen.`}
-          barn={<Link to="/voteringar" className="text-sm underline">Till alla voteringar</Link>}
+          barn={
+            <Link to="/voteringar" className="text-sm underline">
+              Till alla voteringar
+            </Link>
+          }
         />
       </div>
     );
@@ -74,18 +79,15 @@ function VoteringDetalj() {
 
   // Filtrera röstlängden
   const filtreradeRoster = roster.filter((r) => {
-    const namn = r.ledamoter
-      ? `${r.ledamoter.fornamn} ${r.ledamoter.efternamn}`.toLowerCase()
-      : "";
+    const namn = r.ledamoter ? `${r.ledamoter.fornamn} ${r.ledamoter.efternamn}`.toLowerCase() : "";
     const matchNamn = !sokLedamot || namn.includes(sokLedamot.toLowerCase());
     const matchParti = !filterParti || r.parti === filterParti;
     const matchRost = !filterRost || r.rost === filterRost;
 
     const partimajoritet = r.parti ? majoritetsKarta.get(r.parti) : null;
-    const arAvvikare =
-      Boolean(partimajoritet &&
-      ["Ja", "Nej", "Avstår"].includes(r.rost) &&
-      r.rost !== partimajoritet);
+    const arAvvikare = Boolean(
+      partimajoritet && ["Ja", "Nej", "Avstår"].includes(r.rost) && r.rost !== partimajoritet,
+    );
 
     const matchAvvikare = !visaBaraAvvikare || arAvvikare;
 
@@ -105,8 +107,9 @@ function VoteringDetalj() {
       "Avvikare",
     ];
     const rader = roster.map((r) => {
-      const pMaj = r.parti ? majoritetsKarta.get(r.parti) ?? "" : "";
-      const avv = pMaj && ["Ja", "Nej", "Avstår"].includes(r.rost) && r.rost !== pMaj ? "Ja" : "Nej";
+      const pMaj = r.parti ? (majoritetsKarta.get(r.parti) ?? "") : "";
+      const avv =
+        pMaj && ["Ja", "Nej", "Avstår"].includes(r.rost) && r.rost !== pMaj ? "Ja" : "Nej";
       return [
         id,
         r.ledamot_id,
@@ -131,7 +134,11 @@ function VoteringDetalj() {
         lead={`${votering.beteckning ?? "Beteckning saknas"} · punkt ${votering.punkt ?? "–"} · ${datum(votering.datum)} · ${votering.arenden?.organ ?? "Utskott saknas"}`}
         barn={
           <div className="flex flex-wrap items-center gap-3">
-            <Bevaka typ="voteringar" id={votering.id} etikett={`${votering.beteckning} p.${votering.punkt}`} />
+            <Bevaka
+              typ="voteringar"
+              id={votering.id}
+              etikett={`${votering.beteckning} p.${votering.punkt}`}
+            />
             {votering.arende_id ? (
               <Link
                 to="/arenden/$id"
@@ -160,13 +167,16 @@ function VoteringDetalj() {
                 <TextMedMotioner text={votering.gallde} />
               </p>
             ) : (
-              <p className="text-muted-foreground">Konkret voteringsbeskrivning saknas i källdata.</p>
+              <p className="text-muted-foreground">
+                Konkret voteringsbeskrivning saknas i källdata.
+              </p>
             )}
 
             {votering.beslutspunkter ? (
               <div className="rounded-lg border border-border/80 bg-[var(--yta)] p-4 text-xs space-y-2">
                 <p className="font-medium text-foreground">
-                  Beslutspunkt {votering.beslutspunkter.punkt}: {votering.beslutspunkter.rubrik ?? ""}
+                  Beslutspunkt {votering.beslutspunkter.punkt}:{" "}
+                  {votering.beslutspunkter.rubrik ?? ""}
                 </p>
                 {votering.beslutspunkter.forslag ? (
                   <div className="text-muted-foreground leading-relaxed">
@@ -178,7 +188,9 @@ function VoteringDetalj() {
                   <p className="text-muted-foreground">
                     <strong className="text-foreground">Motförslag från:</strong>{" "}
                     <TextMedMotioner text={votering.beslutspunkter.motforslag_partier} />
-                    {votering.beslutspunkter.motforslag_nummer ? ` (reservation ${votering.beslutspunkter.motforslag_nummer})` : ""}
+                    {votering.beslutspunkter.motforslag_nummer
+                      ? ` (reservation ${votering.beslutspunkter.motforslag_nummer})`
+                      : ""}
                   </p>
                 ) : null}
               </div>
@@ -196,17 +208,27 @@ function VoteringDetalj() {
           </div>
         </section>
 
+        {/* Hur skulle du rösta? (Skuggrösta) */}
+        <SkuggRostaKort
+          voteringId={votering.id}
+          voteringResultat={votering}
+          partitotaler={partitotaler}
+        />
+
         {/* Kammarens totala utfall */}
         <section className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
               <h2 className="text-xl font-normal">Kammarens utfall</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Totalt {votering.ja + votering.nej + votering.avstar + votering.franvarande} ledamöter
+                Totalt {votering.ja + votering.nej + votering.avstar + votering.franvarande}{" "}
+                ledamöter
               </p>
             </div>
             <span className="rounded-full bg-[var(--accent-insikt-svag)] px-3 py-1 text-sm font-medium text-[var(--accent-insikt)]">
-              {votering.vinnare ? `${votering.vinnare} vann omröstningen (${votering.ja} Ja mot ${votering.nej} Nej)` : "Utfall oavgjort eller saknas"}
+              {votering.vinnare
+                ? `${votering.vinnare} vann omröstningen (${votering.ja} Ja mot ${votering.nej} Nej)`
+                : "Utfall oavgjort eller saknas"}
             </span>
           </div>
 
@@ -267,7 +289,9 @@ function VoteringDetalj() {
                       <td className="px-4 py-3 text-xs font-mono">{p.ja}</td>
                       <td className="px-4 py-3 text-xs font-mono">{p.nej}</td>
                       <td className="px-4 py-3 text-xs font-mono">{p.avstar}</td>
-                      <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{p.franvarande}</td>
+                      <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
+                        {p.franvarande}
+                      </td>
                       <td className="px-4 py-3 text-right w-36">
                         <RostDiagram
                           ja={p.ja}
@@ -370,9 +394,7 @@ function VoteringDetalj() {
                 {filtreradeRoster.map((r) => {
                   const pMaj = r.parti ? majoritetsKarta.get(r.parti) : null;
                   const arAvvikare =
-                    pMaj &&
-                    ["Ja", "Nej", "Avstår"].includes(r.rost) &&
-                    r.rost !== pMaj;
+                    pMaj && ["Ja", "Nej", "Avstår"].includes(r.rost) && r.rost !== pMaj;
 
                   return (
                     <tr key={r.ledamot_id} className="hover:bg-accent/40">

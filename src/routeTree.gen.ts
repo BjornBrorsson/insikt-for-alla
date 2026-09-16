@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AvvikelserRouteImport } from './routes/avvikelser'
 import { Route as BevakningarRouteImport } from './routes/bevakningar'
+import { Route as ImporteraRouteImport } from './routes/importera'
 import { Route as JamforRouteImport } from './routes/jamfor'
 import { Route as KallorOchMetodRouteImport } from './routes/kallor-och-metod'
 import { Route as NeutralitetRouteImport } from './routes/neutralitet'
@@ -22,6 +23,7 @@ import { Route as OrdlistaRouteImport } from './routes/ordlista'
 import { Route as RapporteraFelRouteImport } from './routes/rapportera-fel'
 import { Route as SokRouteImport } from './routes/sok'
 import { Route as SplittringarRouteImport } from './routes/splittringar'
+import { Route as ValloftenRouteImport } from './routes/valloften'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ArendenIdRouteImport } from './routes/arenden/$id'
 import { Route as LedamoterIndexRouteImport } from './routes/ledamoter/index'
@@ -58,6 +60,11 @@ const AvvikelserRoute = AvvikelserRouteImport.update({
 const BevakningarRoute = BevakningarRouteImport.update({
   id: '/bevakningar',
   path: '/bevakningar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImporteraRoute = ImporteraRouteImport.update({
+  id: '/importera',
+  path: '/importera',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JamforRoute = JamforRouteImport.update({
@@ -98,6 +105,11 @@ const SokRoute = SokRouteImport.update({
 const SplittringarRoute = SplittringarRouteImport.update({
   id: '/splittringar',
   path: '/splittringar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ValloftenRoute = ValloftenRouteImport.update({
+  id: '/valloften',
+  path: '/valloften',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -171,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/avvikelser': typeof AvvikelserRoute
   '/bevakningar': typeof BevakningarRoute
+  '/importera': typeof ImporteraRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
   '/neutralitet': typeof NeutralitetRoute
@@ -179,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/rapportera-fel': typeof RapporteraFelRoute
   '/sok': typeof SokRoute
   '/splittringar': typeof SplittringarRoute
+  '/valloften': typeof ValloftenRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/arenden/$id': typeof ArendenIdRoute
   '/ledamoter/$id': typeof LedamoterIdRoute
@@ -198,6 +212,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/avvikelser': typeof AvvikelserRoute
   '/bevakningar': typeof BevakningarRoute
+  '/importera': typeof ImporteraRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
   '/neutralitet': typeof NeutralitetRoute
@@ -206,6 +221,7 @@ export interface FileRoutesByTo {
   '/rapportera-fel': typeof RapporteraFelRoute
   '/sok': typeof SokRoute
   '/splittringar': typeof SplittringarRoute
+  '/valloften': typeof ValloftenRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/arenden/$id': typeof ArendenIdRoute
   '/ledamoter/$id': typeof LedamoterIdRoute
@@ -227,6 +243,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/avvikelser': typeof AvvikelserRoute
   '/bevakningar': typeof BevakningarRoute
+  '/importera': typeof ImporteraRoute
   '/jamfor': typeof JamforRoute
   '/kallor-och-metod': typeof KallorOchMetodRoute
   '/neutralitet': typeof NeutralitetRoute
@@ -235,6 +252,7 @@ export interface FileRoutesById {
   '/rapportera-fel': typeof RapporteraFelRoute
   '/sok': typeof SokRoute
   '/splittringar': typeof SplittringarRoute
+  '/valloften': typeof ValloftenRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/arenden/$id': typeof ArendenIdRoute
   '/ledamoter/$id': typeof LedamoterIdRoute
@@ -256,6 +274,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/avvikelser'
     | '/bevakningar'
+    | '/importera'
     | '/jamfor'
     | '/kallor-och-metod'
     | '/neutralitet'
@@ -264,6 +283,7 @@ export interface FileRouteTypes {
     | '/rapportera-fel'
     | '/sok'
     | '/splittringar'
+    | '/valloften'
     | '/admin'
     | '/arenden/$id'
     | '/ledamoter/$id'
@@ -283,6 +303,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/avvikelser'
     | '/bevakningar'
+    | '/importera'
     | '/jamfor'
     | '/kallor-och-metod'
     | '/neutralitet'
@@ -291,6 +312,7 @@ export interface FileRouteTypes {
     | '/rapportera-fel'
     | '/sok'
     | '/splittringar'
+    | '/valloften'
     | '/admin'
     | '/arenden/$id'
     | '/ledamoter/$id'
@@ -311,6 +333,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/avvikelser'
     | '/bevakningar'
+    | '/importera'
     | '/jamfor'
     | '/kallor-och-metod'
     | '/neutralitet'
@@ -319,6 +342,7 @@ export interface FileRouteTypes {
     | '/rapportera-fel'
     | '/sok'
     | '/splittringar'
+    | '/valloften'
     | '/_authenticated/admin'
     | '/arenden/$id'
     | '/ledamoter/$id'
@@ -340,6 +364,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   AvvikelserRoute: typeof AvvikelserRoute
   BevakningarRoute: typeof BevakningarRoute
+  ImporteraRoute: typeof ImporteraRoute
   JamforRoute: typeof JamforRoute
   KallorOchMetodRoute: typeof KallorOchMetodRoute
   NeutralitetRoute: typeof NeutralitetRoute
@@ -348,6 +373,7 @@ export interface RootRouteChildren {
   RapporteraFelRoute: typeof RapporteraFelRoute
   SokRoute: typeof SokRoute
   SplittringarRoute: typeof SplittringarRoute
+  ValloftenRoute: typeof ValloftenRoute
   ArendenIdRoute: typeof ArendenIdRoute
   LedamoterIdRoute: typeof LedamoterIdRoute
   PartierKodRoute: typeof PartierKodRoute
@@ -397,6 +423,13 @@ declare module '@tanstack/react-router' {
       path: '/bevakningar'
       fullPath: '/bevakningar'
       preLoaderRoute: typeof BevakningarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/importera': {
+      id: '/importera'
+      path: '/importera'
+      fullPath: '/importera'
+      preLoaderRoute: typeof ImporteraRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/jamfor': {
@@ -453,6 +486,13 @@ declare module '@tanstack/react-router' {
       path: '/splittringar'
       fullPath: '/splittringar'
       preLoaderRoute: typeof SplittringarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/valloften': {
+      id: '/valloften'
+      path: '/valloften'
+      fullPath: '/valloften'
+      preLoaderRoute: typeof ValloftenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -566,6 +606,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   AvvikelserRoute: AvvikelserRoute,
   BevakningarRoute: BevakningarRoute,
+  ImporteraRoute: ImporteraRoute,
   JamforRoute: JamforRoute,
   KallorOchMetodRoute: KallorOchMetodRoute,
   NeutralitetRoute: NeutralitetRoute,
@@ -574,6 +615,7 @@ const rootRouteChildren: RootRouteChildren = {
   RapporteraFelRoute: RapporteraFelRoute,
   SokRoute: SokRoute,
   SplittringarRoute: SplittringarRoute,
+  ValloftenRoute: ValloftenRoute,
   ArendenIdRoute: ArendenIdRoute,
   LedamoterIdRoute: LedamoterIdRoute,
   PartierKodRoute: PartierKodRoute,
