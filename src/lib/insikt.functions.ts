@@ -2107,3 +2107,239 @@ export const getKompassFragor = createServerFn({ method: "GET" })
 
     return { fragor };
   });
+
+/* ------------------------------------------------------------------ */
+/* Valkrets vs. Riksdagen                                             */
+/* ------------------------------------------------------------------ */
+
+export type ValkretsAvvikandeVotering = {
+  voteringId: string;
+  titel: string;
+  beteckning: string;
+  punkt: string | null;
+  datum: string | null;
+  sakfragor: string[];
+  kammareVinnare: string;
+  kammareJa: number;
+  kammareNej: number;
+  valkretsVinnare: string;
+  valkretsJa: number;
+  valkretsNej: number;
+  valkretsAvstar: number;
+};
+
+export type ValkretsLokalprofil = {
+  ledamotId: string;
+  namn: string;
+  parti: string | null;
+  bild_url_liten: string | null;
+  antalAvvikelser: number;
+  totaltRoster: number;
+  lojalitetProcent: number;
+};
+
+export type ValkretsVsRiksdagenData = {
+  valkrets: string;
+  totaltVoteringar: number;
+  likaMedKammaren: number;
+  enighetProcent: number;
+  avvikandeVoteringar: ValkretsAvvikandeVotering[];
+  partilojalitetProcent: number;
+  lokalprofiler: ValkretsLokalprofil[];
+  sakfragedata: { sakfraga: string; totalt: number; lika: number; procent: number }[];
+};
+
+export const getValkretsVsRiksdagen = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        valkrets: z.string(),
+        sakfraga: z.string().default(""),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data }): Promise<ValkretsVsRiksdagenData> => {
+    const db = await fsDb();
+
+    // 1. Hämta valkretsens ledamöter
+    const ledamotSnap = await db
+      .collection("ledamoter")
+      .where("valkrets", "==", data.valkrets)
+      .where("status", "==", TJANSTGORANDE)
+      .get();
+
+    const ledamoter = ledamotSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Ledamot);
+    if (!ledamoter.length) {
+      return {
+        valkrets: data.valkrets,
+        totaltVoteringar: 0,
+        likaMedKammaren: 0,
+        enighetProcent: 0,
+        avvikandeVoteringar: [],
+        partilojalitetProcent: 100,
+        lokalprofiler: [],
+        sakfragedata: [],
+      };
+    }
+
+    // 2. Hämta ledamöternas röstmatriser
+    const matrisDocs = await db.getAll(
+      ...ledamoter.map((l) => db.collection("rostmatriser").doc(l.id)),
+    );
+
+    const ledamotMatriser = new Map<string, Record<string, MatrisPost>>();
+    for (let i = 0; i < ledamoter.length; i++) {
+      const lid = ledamoter[i]!.id;
+      const d = matrisDocs[i];
+      if (d && d.exists) {
+        ledamotMatriser.set(
+          lid,
+          (d.data() as { poster?: Record<string, MatrisPost> }).poster ?? {},
+        );
+      }
+    }
+
+    // 3. Hämta voteringar
+    let vFraga: Query<DocumentData> = db.collection("voteringar");
+    if (data.sakfraga) {
+      vFraga = vFraga.where("sakfragor", "array-contains", data.sakfraga);
+    }
+    const voteringSnap = await vFraga.get();
+    let voteringar = voteringSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc);
+
+    // Sortera nyast först och begränsa till senaste 150
+    voteringar = voteringar
+      .filter((v) => v.datum && v.datum >= "2022-10-01")
+      .sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? ""))
+      .slice(0, 150);
+
+    let likaMedKammaren = 0;
+    let jamforbaraVoteringar = 0;
+    const avvikandeVoteringar: ValkretsAvvikandeVotering[] = [];
+
+    // Statistik per sakfråga
+    const sakfragaStats = new Map<string, { totalt: number; lika: number }>();
+
+    // Partilojalitet per ledamot
+    const ledamotAvvikelser = new Map<string, { totalt: number; avvikelser: number }>();
+    for (const l of ledamoter) {
+      ledamotAvvikelser.set(l.id, { totalt: 0, avvikelser: 0 });
+    }
+
+    for (const v of voteringar) {
+      let vJa = 0;
+      let vNej = 0;
+      let vAvstar = 0;
+
+      for (const l of ledamoter) {
+        const poster = ledamotMatriser.get(l.id);
+        const p = poster?.[v.id];
+        if (!p || !p.rost || p.rost === "Frånvarande") continue;
+
+        if (p.rost === "Ja") vJa++;
+        else if (p.rost === "Nej") vNej++;
+        else if (p.rost === "Avstår") vAvstar++;
+
+        // Partilojalitet
+        const stats = ledamotAvvikelser.get(l.id)!;
+        stats.totalt++;
+        if (p.majoritet && GILTIGA_ROSTER.has(p.majoritet) && p.rost !== p.majoritet) {
+          stats.avvikelser++;
+        }
+      }
+
+      if (vJa === 0 && vNej === 0) continue; // Inga aktiva röster från valkretsen i denna votering
+
+      jamforbaraVoteringar++;
+
+      const valkretsVinnare = vJa > vNej ? "Ja" : vNej > vJa ? "Nej" : "Oavgjort";
+      const kammareVinnare = (v.ja ?? 0) >= (v.nej ?? 0) ? "Ja" : "Nej";
+
+      const arLika = valkretsVinnare === kammareVinnare;
+      if (arLika) likaMedKammaren++;
+
+      // Sakfrågor
+      for (const sf of v.sakfragor ?? []) {
+        if (!sakfragaStats.has(sf)) {
+          sakfragaStats.set(sf, { totalt: 0, lika: 0 });
+        }
+        const s = sakfragaStats.get(sf)!;
+        s.totalt++;
+        if (arLika) s.lika++;
+      }
+
+      // Om valkretsens majoritet röstade motsatt kammaren
+      if (valkretsVinnare !== "Oavgjort" && valkretsVinnare !== kammareVinnare) {
+        avvikandeVoteringar.push({
+          voteringId: v.id,
+          titel: v.rubrik ?? v.arende_titel ?? "Votering",
+          beteckning: v.beteckning ?? "Omröstning",
+          punkt: v.punkt ?? null,
+          datum: v.datum ?? null,
+          sakfragor: v.sakfragor ?? [],
+          kammareVinnare,
+          kammareJa: v.ja ?? 0,
+          kammareNej: v.nej ?? 0,
+          valkretsVinnare,
+          valkretsJa: vJa,
+          valkretsNej: vNej,
+          valkretsAvstar: vAvstar,
+        });
+      }
+    }
+
+    const enighetProcent =
+      jamforbaraVoteringar > 0 ? Math.round((likaMedKammaren / jamforbaraVoteringar) * 100) : 0;
+
+    // Sammanställ partilojalitet och lokalprofiler
+    let totalaRoster = 0;
+    let totalaAvvikelser = 0;
+    const lokalprofiler: ValkretsLokalprofil[] = [];
+
+    for (const l of ledamoter) {
+      const stats = ledamotAvvikelser.get(l.id)!;
+      totalaRoster += stats.totalt;
+      totalaAvvikelser += stats.avvikelser;
+
+      const lojalitetProcent =
+        stats.totalt > 0
+          ? Math.round(((stats.totalt - stats.avvikelser) / stats.totalt) * 100)
+          : 100;
+
+      lokalprofiler.push({
+        ledamotId: l.id,
+        namn: `${l.fornamn} ${l.efternamn}`,
+        parti: l.parti,
+        bild_url_liten: l.bild_url_liten ?? null,
+        antalAvvikelser: stats.avvikelser,
+        totaltRoster: stats.totalt,
+        lojalitetProcent,
+      });
+    }
+
+    lokalprofiler.sort((a, b) => b.antalAvvikelser - a.antalAvvikelser);
+
+    const partilojalitetProcent =
+      totalaRoster > 0 ? Math.round(((totalaRoster - totalaAvvikelser) / totalaRoster) * 100) : 100;
+
+    const sakfragedata = [...sakfragaStats.entries()]
+      .filter(([_, s]) => s.totalt >= 3)
+      .map(([sf, s]) => ({
+        sakfraga: sf,
+        totalt: s.totalt,
+        lika: s.lika,
+        procent: Math.round((s.lika / s.totalt) * 100),
+      }))
+      .sort((a, b) => a.procent - b.procent); // Minst eniga först (mest intressant för lokala avvikelser)
+
+    return {
+      valkrets: data.valkrets,
+      totaltVoteringar: jamforbaraVoteringar,
+      likaMedKammaren,
+      enighetProcent,
+      avvikandeVoteringar: avvikandeVoteringar.slice(0, 20),
+      partilojalitetProcent,
+      lokalprofiler: lokalprofiler.filter((p) => p.totaltRoster > 0).slice(0, 10),
+      sakfragedata,
+    };
+  });

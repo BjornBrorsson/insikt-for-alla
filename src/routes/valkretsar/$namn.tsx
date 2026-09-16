@@ -7,6 +7,7 @@ import { getValkrets } from "@/lib/insikt.functions";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { LedamotKort, PartiMarke } from "@/components/insikt/delar";
 import { ValkretsMatchning } from "@/components/insikt/valkrets-matchning";
+import { ValkretsVsRiksdagen } from "@/components/insikt/valkrets-jamforelse";
 
 export const Route = createFileRoute("/valkretsar/$namn")({
   head: ({ params }) => ({
@@ -147,6 +148,9 @@ function ValkretsDetalj() {
             ))}
           </div>
         </section>
+
+        {/* Valkretsen vs. Riksdagen */}
+        <ValkretsVsRiksdagen valkrets={avkodatNamn} ledamoter={ledamoter} />
 
         {/* Valkrets-matchning mot skuggröster */}
         <ValkretsMatchning valkrets={avkodatNamn} ledamoter={ledamoter} />
