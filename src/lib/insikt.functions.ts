@@ -232,9 +232,7 @@ export const getLedamot = createServerFn({ method: "GET" })
         .limit(300),
       db.rpc("ledamot_sammanfattning", {
         _ledamot: data.id,
-        _fran: fran,
-        _till: till,
-        _sakfraga: null,
+        ...period(fran, till),
       }),
     ]);
 
@@ -332,8 +330,8 @@ export const getParti = createServerFn({ method: "GET" })
         .eq("status", "Tjänstgörande riksdagsledamot")
         .order("efternamn")
         .limit(500),
-      db.rpc("parti_sammanhallning", { _parti: data.kod, _fran: fran, _till: till }),
-      db.rpc("parti_likhet", { _parti: data.kod, _fran: fran, _till: till }),
+      db.rpc("parti_sammanhallning", { _parti: data.kod, ...period(fran, till) }),
+      db.rpc("parti_likhet", { _parti: data.kod, ...period(fran, till) }),
       db
         .from("partitotaler")
         .select("ja, nej, avstar, franvarande, voteringar(id, rubrik, beteckning, punkt, datum, gallde, arenden(titel))")
@@ -783,9 +781,7 @@ export const jamforLedamoter = createServerFn({ method: "GET" })
       db.rpc("jamfor_ledamoter", {
         _a: data.a,
         _b: data.b,
-        _fran: data.fran || null,
-        _till: data.till || null,
-        _sakfraga: data.sakfraga || null,
+        ...period(data.fran, data.till, data.sakfraga),
       }),
     ]);
     if (rader.error) throw new Error(rader.error.message);
@@ -828,9 +824,7 @@ export const jamforPartier = createServerFn({ method: "GET" })
     const { data: rader, error } = await db.rpc("jamfor_partier", {
       _a: data.a,
       _b: data.b,
-      _fran: data.fran || null,
-      _till: data.till || null,
-      _sakfraga: data.sakfraga || null,
+      ...period(data.fran, data.till, data.sakfraga),
     });
     if (error) throw new Error(error.message);
     const lista = (rader ?? []) as {
@@ -1086,7 +1080,9 @@ const RM_PREFIX: Record<string, string> = {
 function beraknaMotionDokId(bet: string): string | null {
   const m = bet.match(/(\d{4}\/\d{2}):(\d+)/);
   if (!m) return null;
-  const p = RM_PREFIX[m[1]];
+  const rm = m[1];
+  if (!rm) return null;
+  const p = RM_PREFIX[rm];
   if (!p) return null;
   return `${p}02${m[2]}`;
 }
