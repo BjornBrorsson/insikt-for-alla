@@ -6,6 +6,7 @@ import { useState } from "react";
 import { getValkrets } from "@/lib/insikt.functions";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { LedamotKort, PartiMarke } from "@/components/insikt/delar";
+import { ValkretsMatchning } from "@/components/insikt/valkrets-matchning";
 
 export const Route = createFileRoute("/valkretsar/$namn")({
   head: ({ params }) => ({
@@ -40,7 +41,11 @@ function ValkretsDetalj() {
         <Tomt
           rubrik="Valkretsen hittades inte"
           text={`Det finns inga uppgifter om en valkrets med namnet ”${avkodatNamn}”.`}
-          barn={<Link to="/valkretsar" className="text-sm underline">Till alla valkretsar</Link>}
+          barn={
+            <Link to="/valkretsar" className="text-sm underline">
+              Till alla valkretsar
+            </Link>
+          }
         />
       </div>
     );
@@ -86,14 +91,24 @@ function ValkretsDetalj() {
                 className="h-full"
                 style={{
                   width: `${(f.antal / totaltMandat) * 100}%`,
-                  backgroundColor: f.parti === "S" ? "#E8112d" :
-                                   f.parti === "SD" ? "#DDDD00" :
-                                   f.parti === "M" ? "#52BDEC" :
-                                   f.parti === "C" ? "#009933" :
-                                   f.parti === "V" ? "#DA291C" :
-                                   f.parti === "KD" ? "#000077" :
-                                   f.parti === "MP" ? "#83CF39" :
-                                   f.parti === "L" ? "#006AB3" : "#888888",
+                  backgroundColor:
+                    f.parti === "S"
+                      ? "#E8112d"
+                      : f.parti === "SD"
+                        ? "#DDDD00"
+                        : f.parti === "M"
+                          ? "#52BDEC"
+                          : f.parti === "C"
+                            ? "#009933"
+                            : f.parti === "V"
+                              ? "#DA291C"
+                              : f.parti === "KD"
+                                ? "#000077"
+                                : f.parti === "MP"
+                                  ? "#83CF39"
+                                  : f.parti === "L"
+                                    ? "#006AB3"
+                                    : "#888888",
                 }}
                 title={`${f.parti}: ${f.antal} mandat`}
               />
@@ -125,17 +140,23 @@ function ValkretsDetalj() {
                 }`}
               >
                 <PartiMarke kod={f.parti} />
-                <span>{f.antal} {f.antal === 1 ? "mandat" : "mandat"}</span>
+                <span>
+                  {f.antal} {f.antal === 1 ? "mandat" : "mandat"}
+                </span>
               </button>
             ))}
           </div>
         </section>
 
+        {/* Valkrets-matchning mot skuggröster */}
+        <ValkretsMatchning valkrets={avkodatNamn} ledamoter={ledamoter} />
+
         {/* Ledamöter */}
         <section>
           <div className="mb-6 flex items-baseline justify-between">
             <h2 className="text-2xl font-normal">
-              Ledamöter {valtParti !== "alla" ? `för ${valtParti}` : ""} ({filtreradeLedamoter.length})
+              Ledamöter {valtParti !== "alla" ? `för ${valtParti}` : ""} (
+              {filtreradeLedamoter.length})
             </h2>
             {valtParti !== "alla" ? (
               <button

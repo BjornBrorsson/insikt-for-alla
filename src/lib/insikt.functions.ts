@@ -545,6 +545,69 @@ export const getValkrets = createServerFn({ method: "GET" })
     };
   });
 
+export type ValkretsRostPost = {
+  rost: string;
+  titel: string | null;
+  beteckning: string | null;
+  punkt: string | null;
+  datum: string | null;
+};
+
+export const getValkretsMatchningsunderlag = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        valkrets: z.string(),
+        voteringIds: z.array(z.string()).max(300),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    if (!data.voteringIds.length) {
+      return { underlag: {} };
+    }
+    const db = await fsDb();
+    const snap = await db
+      .collection("ledamoter")
+      .where("valkrets", "==", data.valkrets)
+      .where("status", "==", TJANSTGORANDE)
+      .get();
+    const ledamotIds = snap.docs.map((d) => d.id);
+    if (!ledamotIds.length) {
+      return { underlag: {} };
+    }
+
+    const underlag: Record<string, Record<string, ValkretsRostPost>> = {};
+
+    const matrisDocs = await db.getAll(
+      ...ledamotIds.map((id) => db.collection("rostmatriser").doc(id)),
+    );
+
+    for (let i = 0; i < ledamotIds.length; i++) {
+      const lid = ledamotIds[i]!;
+      const doc = matrisDocs[i];
+      if (!doc || !doc.exists) continue;
+      const poster = (doc.data() as { poster?: Record<string, MatrisPost> }).poster ?? {};
+      const matchade: Record<string, ValkretsRostPost> = {};
+
+      for (const vid of data.voteringIds) {
+        const p = poster[vid];
+        if (p && p.rost) {
+          matchade[vid] = {
+            rost: p.rost,
+            titel: p.titel ?? null,
+            beteckning: p.beteckning ?? null,
+            punkt: p.punkt ?? null,
+            datum: p.datum ?? null,
+          };
+        }
+      }
+      underlag[lid] = matchade;
+    }
+
+    return { underlag };
+  });
+
 /* ------------------------------------------------------------------ */
 /* Voteringar och ärenden                                             */
 /* ------------------------------------------------------------------ */
