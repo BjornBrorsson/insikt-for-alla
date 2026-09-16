@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { useProfil, type SkuggRostTyp } from "@/lib/profil";
 import {
   getKompassFragor,
+  getVoteringsSammanfattning,
   listPartier,
   listSakfragor,
   type KompassFraga,
@@ -54,6 +55,95 @@ export const Route = createFileRoute("/kompass")({
 });
 
 type SvarRecord = Record<string, SkuggRostTyp | "HoppaOver">;
+
+function KompassFragaSammanfattning({
+  voteringId,
+  initialSammanfattning,
+  tillrackligtUnderlag = true,
+}: {
+  voteringId: string;
+  initialSammanfattning?: string | null | undefined;
+  tillrackligtUnderlag?: boolean | undefined;
+}) {
+  const hamtaSammanfattning = useServerFn(getVoteringsSammanfattning);
+
+  const query = useQuery({
+    queryKey: ["voteringssammanfattning", voteringId],
+    queryFn: () => hamtaSammanfattning({ data: { id: voteringId } }),
+    enabled: !initialSammanfattning && Boolean(voteringId),
+    staleTime: Infinity,
+    retry: 1,
+  });
+
+  const text =
+    initialSammanfattning ||
+    (query.data?.status === "klar" ? query.data.sammanfattning.sammanfattning : null);
+
+  const underlagOkej =
+    initialSammanfattning !== null && initialSammanfattning !== undefined
+      ? tillrackligtUnderlag
+      : query.data?.status === "klar"
+        ? query.data.sammanfattning.tillrackligt_underlag
+        : true;
+
+  if (query.isPending && !initialSammanfattning) {
+    return (
+      <div
+        className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 space-y-2 animate-pulse"
+        aria-live="polite"
+      >
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300">
+          <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400 animate-spin" />
+          <span>Hämtar AI-sammanfattning i klartext …</span>
+        </div>
+        <div className="space-y-1.5 pt-1">
+          <div className="h-3 w-11/12 rounded bg-purple-500/15" />
+          <div className="h-3 w-full rounded bg-purple-500/15" />
+          <div className="h-3 w-4/5 rounded bg-purple-500/15" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!text) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-4 sm:p-5 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300">
+          <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+          Omröstningen i korthet (AI-sammanfattning)
+        </span>
+        <Link
+          to="/voteringar/$id"
+          params={{ id: voteringId }}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] text-purple-700 dark:text-purple-300 hover:underline inline-flex items-center gap-1"
+        >
+          <span>Läs hela voteringen</span>
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+
+      <div className="text-xs sm:text-sm leading-relaxed text-foreground space-y-2">
+        {text.split("\n\n").map((stycke, i) => (
+          <p key={i} className="text-foreground/90 leading-relaxed">
+            {stycke}
+          </p>
+        ))}
+      </div>
+
+      {!underlagOkej ? (
+        <p className="pt-1 text-[11px] text-amber-700 dark:text-amber-300 italic">
+          Obs: Underlaget i riksdagsdatan var begränsat för denna punkt.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function KompassSida() {
   const search = Route.useSearch();
@@ -569,6 +659,13 @@ function KompassSida() {
                     </p>
                   ) : null}
                 </div>
+
+                {/* AI-sammanfattning i klartext */}
+                <KompassFragaSammanfattning
+                  voteringId={aktivFraga.id}
+                  initialSammanfattning={aktivFraga.sammanfattning}
+                  tillrackligtUnderlag={aktivFraga.tillrackligtUnderlag}
+                />
 
                 {/* Förklaringsboxar vad JA och NEJ innebär */}
                 <div className="grid gap-3 sm:grid-cols-2 pt-2">

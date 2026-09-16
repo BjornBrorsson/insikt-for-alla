@@ -1981,6 +1981,8 @@ export type KompassFraga = {
   datum: string | null;
   gallde: string | null;
   sakfragor: string[];
+  sammanfattning: string | null;
+  tillrackligtUnderlag?: boolean;
   jaInnebord: { rubrik: string; beskrivning: string };
   nejInnebord: { rubrik: string; beskrivning: string };
   partiRoster: Record<string, "Ja" | "Nej" | "Avstår" | null>;
@@ -2073,26 +2075,66 @@ export const getKompassFragor = createServerFn({ method: "GET" })
       }
     }
 
+    // Läs in beslutspunkter för att ge analyseraBeslut fullt sammanhang
+    const bpIds = valda.map((v) => v.beslutspunkt_id).filter((id): id is string => Boolean(id));
+    const bpMap = new Map<string, Record<string, unknown>>();
+    if (bpIds.length > 0) {
+      const bpRefs = bpIds.map((id) => db.collection("beslutspunkter").doc(id));
+      const bpSnaps = await db.getAll(...bpRefs);
+      for (const snap of bpSnaps) {
+        if (snap.exists) {
+          bpMap.set(snap.id, snap.data() as Record<string, unknown>);
+        }
+      }
+    }
+
+    // Läs in befintliga AI-sammanfattningar från ai_voteringssammanfattningar
+    const aiMap = new Map<string, { sammanfattning: string; tillrackligt_underlag?: boolean }>();
+    if (voteringIds.length > 0) {
+      const aiRefs = voteringIds.map((id) => db.collection("ai_voteringssammanfattningar").doc(id));
+      const aiSnaps = await db.getAll(...aiRefs);
+      for (const snap of aiSnaps) {
+        if (snap.exists) {
+          const aiData = snap.data() as { sammanfattning: string; tillrackligt_underlag?: boolean };
+          if (aiData?.sammanfattning) {
+            aiMap.set(snap.id, aiData);
+          }
+        }
+      }
+    }
+
     const fragor: KompassFraga[] = valda.map((v) => {
+      const bp = v.beslutspunkt_id ? bpMap.get(v.beslutspunkt_id) : null;
+      const forslag = (bp?.["forslag"] as string | null) ?? v.forslag ?? null;
+      const motforslag_partier =
+        (bp?.["motforslag_partier"] as string | null) ?? v.motforslag_partier ?? null;
+      const motforslag_nummer =
+        (bp?.["motforslag_nummer"] as string | null) ?? v.motforslag_nummer ?? null;
+      const bpRubrik = (bp?.["rubrik"] as string | null) ?? v.rubrik;
+
       const analys = analyseraBeslut({
-        forslag: v.forslag,
-        rubrik: v.rubrik ?? v.arende_titel ?? undefined,
+        forslag,
+        rubrik: bpRubrik ?? v.arende_titel ?? undefined,
         gallde: v.gallde ?? undefined,
-        motforslag_partier: v.motforslag_partier,
-        motforslag_nummer: v.motforslag_nummer,
+        motforslag_partier,
+        motforslag_nummer,
         ja: v.ja,
         nej: v.nej,
       });
 
+      const aiInfo = aiMap.get(v.id);
+
       return {
         id: v.id,
-        rubrik: v.rubrik ?? v.arende_titel ?? "Votering",
+        rubrik: bpRubrik ?? v.rubrik ?? v.arende_titel ?? "Votering",
         beteckning: v.beteckning ?? null,
         punkt: v.punkt ?? null,
         organ: v.organ ?? null,
         datum: v.datum ?? null,
         gallde: v.gallde ?? null,
         sakfragor: v.sakfragor ?? [],
+        sammanfattning: aiInfo?.sammanfattning ?? null,
+        tillrackligtUnderlag: aiInfo?.tillrackligt_underlag ?? true,
         jaInnebord: {
           rubrik: analys.ja.rubrik,
           beskrivning: analys.ja.beskrivning,
