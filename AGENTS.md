@@ -25,6 +25,7 @@
 - SQL-vyn `v_partimajoritet` motsvaras av `majoritetsrost()` i `fs-db.server.ts` (oavgjort → null).
 - Textsökning görs i minnet efter equality-filter – Firestore saknar contains-sök.
 - Migrationsskript (engångskörning, idempotent, återupptagbart): `node scripts/migrera-till-firestore.mjs`. Kräver `SUPABASE_*` i `.env` + ADC (`gcloud auth application-default login`).
+- `valloften` innehåller kurerade vallöften (citat ur valmanifest 2022 via SND:s Vivill-arkiv) kopplade till voteringar med `relation` (direkt/delvis/relaterad), `riktning` (röst i linje med löftet, eller null) och neutrala `forklaringar`. Seeda/uppdatera med `node scripts/seed-valloften.mjs` (idempotent, deterministiska dokument-ID:n; kräver ADC).
 
 ## Auth
 

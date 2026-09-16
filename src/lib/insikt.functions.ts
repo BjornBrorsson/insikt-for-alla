@@ -1707,3 +1707,100 @@ export const getSplittringar = createServerFn({ method: "GET" })
       uppdaterad: agg?.uppdaterad ?? null,
     };
   });
+
+/* ------------------------------------------------------------------ */
+/* Vallöften                                                           */
+/* ------------------------------------------------------------------ */
+
+type VallofteKoppling = {
+  votering_id: string;
+  relation: "direkt" | "delvis" | "relaterad";
+  /** Vilken röst som ligger i linje med löftets riktning, om den är entydig. */
+  riktning: "Ja" | "Nej" | null;
+  forklaringar: string[];
+};
+
+type VallofteDoc = {
+  parti: string;
+  lofte: string;
+  sakfragor: string[];
+  kalla: { titel: string; url: string; utgivare: string; val_ar: number };
+  kopplingar: VallofteKoppling[];
+  uppdaterad?: string;
+};
+
+export const listValloften = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        parti: z.string().default(""),
+        sakfraga: z.string().default(""),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const db = await fsDb();
+    let fraga: Query<DocumentData> = db.collection("valloften");
+    if (data.parti) fraga = fraga.where("parti", "==", data.parti);
+
+    const snap = await fraga.get();
+    let loften = snap.docs.map((d) => ({ id: d.id, ...(d.data() as VallofteDoc) }));
+    if (data.sakfraga) loften = loften.filter((l) => (l.sakfragor ?? []).includes(data.sakfraga));
+
+    // Hämta voteringar + partiets röstfördelning för alla kopplingar.
+    const voteringIds = [...new Set(loften.flatMap((l) => l.kopplingar.map((k) => k.votering_id)))];
+    const voteringar = new Map<string, VoteringDoc>();
+    if (voteringIds.length) {
+      const docs = await db.getAll(...voteringIds.map((id) => db.collection("voteringar").doc(id)));
+      for (const d of docs)
+        if (d.exists) voteringar.set(d.id, { ...(d.data() as VoteringDoc), id: d.id });
+    }
+
+    const totaler = new Map<string, PartitotalDoc>();
+    for (let i = 0; i < voteringIds.length; i += 30) {
+      const chunk = voteringIds.slice(i, i + 30);
+      if (!chunk.length) break;
+      const pt = await db.collection("partitotaler").where("votering_id", "in", chunk).get();
+      for (const d of pt.docs) {
+        const t = d.data() as PartitotalDoc;
+        totaler.set(`${t.votering_id}|${t.parti}`, t);
+      }
+    }
+
+    return loften.map((l) => ({
+      ...l,
+      kopplingar: l.kopplingar.map((k) => {
+        const v = voteringar.get(k.votering_id);
+        const t = totaler.get(`${k.votering_id}|${l.parti}`);
+        return {
+          ...k,
+          votering: v
+            ? {
+                id: v.id,
+                beteckning: v.beteckning,
+                punkt: v.punkt,
+                rubrik: v.rubrik,
+                arende_titel: v.arende_titel,
+                gallde: v.gallde,
+                datum: v.datum,
+                vinnare: v.vinnare,
+                kalla_url: v.kalla_url,
+                ja: v.ja,
+                nej: v.nej,
+                avstar: v.avstar,
+                franvarande: v.franvarande,
+              }
+            : null,
+          partiRost: t
+            ? {
+                majoritetsrost: t.majoritetsrost,
+                ja: t.ja,
+                nej: t.nej,
+                avstar: t.avstar,
+                franvarande: t.franvarande,
+              }
+            : null,
+        };
+      }),
+    }));
+  });
