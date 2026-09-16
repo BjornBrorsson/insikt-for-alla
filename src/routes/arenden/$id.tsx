@@ -8,6 +8,7 @@ import { EgenBerakning, Fel, Kalla, Laddar, Sidhuvud, Tomt } from "@/components/
 import { Bevaka, RostDiagram } from "@/components/insikt/delar";
 import { TextMedMotioner } from "@/components/insikt/motion-modal";
 import { analyseraBeslut } from "@/lib/beslut-analys";
+import { ForslagetsResa } from "@/components/insikt/forslagets-resa";
 
 export const Route = createFileRoute("/arenden/$id")({
   head: ({ params }) => ({
@@ -84,6 +85,9 @@ function ArendeDetalj() {
             ))}
           </div>
         ) : null}
+
+        {/* Förslagets resa: Visuell tidslinje */}
+        <ForslagetsResa arende={arende} punkter={punkter} voteringar={voteringar} />
 
         {/* Sammanfattning */}
         <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
