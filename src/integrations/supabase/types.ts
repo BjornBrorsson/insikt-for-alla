@@ -55,6 +55,44 @@ export type Database = {
           },
         ]
       }
+      ai_voteringssammanfattningar: {
+        Row: {
+          granskad: boolean
+          id: string
+          modell: string
+          sammanfattning: string
+          skapad: string
+          tillrackligt_underlag: boolean
+          votering_id: string
+        }
+        Insert: {
+          granskad?: boolean
+          id?: string
+          modell: string
+          sammanfattning: string
+          skapad?: string
+          tillrackligt_underlag?: boolean
+          votering_id: string
+        }
+        Update: {
+          granskad?: boolean
+          id?: string
+          modell?: string
+          sammanfattning?: string
+          skapad?: string
+          tillrackligt_underlag?: boolean
+          votering_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_voteringssammanfattningar_votering_id_fkey"
+            columns: ["votering_id"]
+            isOneToOne: true
+            referencedRelation: "voteringar"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       anvandarroller: {
         Row: {
           created_at: string

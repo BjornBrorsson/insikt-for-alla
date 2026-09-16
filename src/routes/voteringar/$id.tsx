@@ -10,6 +10,7 @@ import { Bevaka, PartiMarke, RostDiagram, RostMarke } from "@/components/insikt/
 import { TextMedMotioner } from "@/components/insikt/motion-modal";
 import { analyseraBeslut } from "@/lib/beslut-analys";
 import { RostGuideKlartext, BeslutsUtfallKlartext } from "@/components/insikt/beslut-forklaring";
+import { VoteringsSammanfattning } from "@/components/insikt/voteringssammanfattning";
 
 export const Route = createFileRoute("/voteringar/$id")({
   head: ({ params }) => ({
@@ -146,6 +147,9 @@ function VoteringDetalj() {
       />
 
       <div className="mx-auto max-w-6xl px-4 py-10 space-y-10">
+        {/* AI-sammanfattning i klartext */}
+        <VoteringsSammanfattning voteringId={votering.id} />
+
         {/* Vad gällde omröstningen? */}
         <section className="rounded-xl border border-border bg-card p-6 shadow-xs">
           <h2 className="text-xl font-normal">Vad gällde omröstningen?</h2>

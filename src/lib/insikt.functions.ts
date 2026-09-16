@@ -571,6 +571,120 @@ export const getVotering = createServerFn({ method: "GET" })
     };
   });
 
+export type VoteringsSammanfattning = {
+  sammanfattning: string;
+  modell: string;
+  tillrackligt_underlag: boolean;
+  granskad: boolean;
+  skapad: string;
+};
+
+export type VoteringsSammanfattningSvar =
+  | { status: "klar"; sammanfattning: VoteringsSammanfattning }
+  | { status: "ej_konfigurerad" }
+  | { status: "saknas" }
+  | { status: "for_mycket_trafik"; orsak: "ip" | "global" };
+
+/**
+ * Hämtar en AI-genererad klartextsammanfattning av en votering.
+ * Finns ingen sparad genereras en vid första anropet och sparas (cache).
+ */
+export const getVoteringsSammanfattning = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => z.object({ id: z.string() }).parse(input))
+  .handler(async ({ data }): Promise<VoteringsSammanfattningSvar> => {
+    const db = publicDb();
+    const KOLUMNER = "sammanfattning, modell, tillrackligt_underlag, granskad, skapad";
+
+    const { data: sparad } = await db
+      .from("ai_voteringssammanfattningar")
+      .select(KOLUMNER)
+      .eq("votering_id", data.id)
+      .maybeSingle();
+    if (sparad) return { status: "klar", sammanfattning: sparad };
+
+    const { geminiKonfigurerad } = await import("./gemini.server");
+    if (!geminiKonfigurerad()) return { status: "ej_konfigurerad" };
+
+    const { data: votering } = await db
+      .from("voteringar")
+      .select(
+        `${VOTERING_KOLUMNER}, arenden(titel, organ), beslutspunkter(rubrik, forslag, motforslag_nummer, motforslag_partier)`,
+      )
+      .eq("id", data.id)
+      .maybeSingle();
+    if (!votering) return { status: "saknas" };
+
+    const [partitotaler, majoritet] = await Promise.all([
+      db.from("partitotaler").select("parti, ja, nej, avstar, franvarande").eq("votering_id", data.id),
+      db.from("v_partimajoritet").select("parti, majoritetsrost").eq("votering_id", data.id),
+    ]);
+    const majoritetsKarta = new Map((majoritet.data ?? []).map((m) => [m.parti, m.majoritetsrost] as const));
+
+    const v = votering as unknown as Votering & {
+      arenden: { titel: string | null; organ: string | null } | null;
+      beslutspunkter: {
+        rubrik: string | null;
+        forslag: string | null;
+        motforslag_nummer: string | null;
+        motforslag_partier: string | null;
+      } | null;
+    };
+
+    // Rate limit kontrolleras först när vi vet att en generering faktiskt behövs.
+    const { reserveraAiGenerering, klientIp } = await import("./rate-limit.server");
+    const plats = reserveraAiGenerering(klientIp());
+    if (!plats.ok) return { status: "for_mycket_trafik", orsak: plats.orsak };
+
+    const { genereraVoteringssammanfattning } = await import("./voteringssammanfattning.server");
+    const { GeminiKvotFel } = await import("./gemini.server");
+    let genererad;
+    try {
+      genererad = await genereraVoteringssammanfattning({
+      id: v.id,
+      titel: v.arenden?.titel ?? null,
+      beteckning: v.beteckning,
+      punkt: v.punkt,
+      rubrik: v.rubrik,
+      gallde: v.gallde,
+      datum: v.datum,
+      organ: v.arenden?.organ ?? null,
+      ja: v.ja,
+      nej: v.nej,
+      avstar: v.avstar,
+      franvarande: v.franvarande,
+      vinnare: v.vinnare,
+      beslutspunkt: v.beslutspunkter,
+      partier: ((partitotaler.data ?? []) as { parti: string; ja: number; nej: number; avstar: number; franvarande: number }[]).map(
+        (p) => ({ ...p, majoritetsrost: majoritetsKarta.get(p.parti) ?? null }),
+      ),
+      });
+    } catch (fel) {
+      if (fel instanceof GeminiKvotFel) {
+        console.warn("[Insikt]", fel.message);
+        return { status: "for_mycket_trafik", orsak: "global" };
+      }
+      throw fel;
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // ignoreDuplicates: om två besökare triggar generering samtidigt vinner den första.
+    const { error } = await supabaseAdmin
+      .from("ai_voteringssammanfattningar")
+      .upsert({ votering_id: data.id, ...genererad }, { onConflict: "votering_id", ignoreDuplicates: true });
+    if (error) console.error("[Insikt] Kunde inte spara voteringssammanfattning:", error.message);
+
+    const { data: slutlig } = await db
+      .from("ai_voteringssammanfattningar")
+      .select(KOLUMNER)
+      .eq("votering_id", data.id)
+      .maybeSingle();
+
+    return {
+      status: "klar",
+      sammanfattning: slutlig ?? { ...genererad, granskad: false, skapad: new Date().toISOString() },
+    };
+  });
+
 export const getArende = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ id: z.string() }).parse(input))
   .handler(async ({ data }) => {
