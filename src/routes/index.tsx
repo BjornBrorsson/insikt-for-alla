@@ -116,6 +116,17 @@ function Start() {
                       {datum(v.datum)} · {v.arenden?.organ ?? "Utskott saknas"}
                     </p>
                     {v.gallde ? <p className="mt-2 text-sm">{rensaHtml(v.gallde)}</p> : null}
+                    {v.innebord ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Ja</span>
+                        {" = "}
+                        {v.innebord.ja}
+                        <span className="mx-2 text-border">·</span>
+                        <span className="font-medium text-foreground">Nej</span>
+                        {" = "}
+                        {v.innebord.nej}
+                      </p>
+                    ) : null}
                     <div className="mt-3">
                       <RostDiagram
                         ja={v.ja}

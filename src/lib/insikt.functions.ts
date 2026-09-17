@@ -275,20 +275,48 @@ export const getStartsida = createServerFn({ method: "GET" }).handler(async () =
     ),
   ].sort((a, b) => a.localeCompare(b, "sv"));
 
-  const senasteVoteringar = voteringar
+  const senaste = voteringar
     .filter((v) => v.datum)
     .sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? ""))
-    .slice(0, 8)
-    .map((v) => ({
+    .slice(0, 8);
+
+  // Beslutspunkterna för startsidans voteringar (max 8 dokument) – behövs
+  // för att analyseraBeslut ska kunna förklara vad Ja respektive Nej innebär.
+  const db = await fsDb();
+  const bpIds = senaste.map((v) => v.beslutspunkt_id).filter((id): id is string => !!id);
+  const bpMap = new Map<string, Record<string, unknown>>();
+  if (bpIds.length > 0) {
+    const bpSnaps = await db.getAll(...bpIds.map((id) => db.collection("beslutspunkter").doc(id)));
+    for (const s of bpSnaps) {
+      if (s.exists) bpMap.set(s.id, s.data() as Record<string, unknown>);
+    }
+  }
+
+  const senasteVoteringar = senaste.map((v) => {
+    const bp = v.beslutspunkt_id ? bpMap.get(v.beslutspunkt_id) : undefined;
+    const analys = analyseraBeslut({
+      forslag: (bp?.["forslag"] as string | null) ?? v.forslag,
+      rubrik: (bp?.["rubrik"] as string | null) ?? v.rubrik,
+      gallde: v.gallde,
+      motforslag_partier: (bp?.["motforslag_partier"] as string | null) ?? v.motforslag_partier,
+      motforslag_nummer: (bp?.["motforslag_nummer"] as string | null) ?? v.motforslag_nummer,
+      vinnare: v.vinnare,
+      ja: v.ja,
+      nej: v.nej,
+    });
+    return {
       ...v,
       arenden: v.arende_id
         ? { id: v.arende_id, titel: v.arende_titel ?? null, organ: v.organ ?? null, rm: v.rm }
         : null,
-    }));
+      innebord: { ja: analys.ja.rubrik, nej: analys.nej.rubrik },
+    };
+  });
 
   return {
     senasteVoteringar: senasteVoteringar as (Votering & {
       arenden: { id: string; titel: string | null; organ: string | null; rm: string | null } | null;
+      innebord: { ja: string; nej: string };
     })[],
     partier: partier.sort((a, b) => a.ordning - b.ordning),
     sakfragor: sakfragor
@@ -1254,7 +1282,7 @@ export const getSakfraga = createServerFn({ method: "GET" })
         datum: a.datum,
       }));
 
-    const voteringar = allaVoteringar
+    const senasteV = allaVoteringar
       .filter((v) => (v.sakfragor ?? []).includes(data.slug))
       .sort((a, b) => {
         if (a.datum && b.datum) return b.datum.localeCompare(a.datum);
@@ -1262,11 +1290,40 @@ export const getSakfraga = createServerFn({ method: "GET" })
         if (b.datum) return 1;
         return 0;
       })
-      .slice(0, 20)
-      .map((v) => ({
+      .slice(0, 20);
+
+    // Beslutspunkterna för sakfrågans voteringar (max 20 dokument) – behövs
+    // för att analyseraBeslut ska kunna förklara vad Ja respektive Nej innebär.
+    const db = await fsDb();
+    const bpIds = senasteV.map((v) => v.beslutspunkt_id).filter((id): id is string => !!id);
+    const bpMap = new Map<string, Record<string, unknown>>();
+    if (bpIds.length > 0) {
+      const bpSnaps = await db.getAll(
+        ...bpIds.map((id) => db.collection("beslutspunkter").doc(id)),
+      );
+      for (const s of bpSnaps) {
+        if (s.exists) bpMap.set(s.id, s.data() as Record<string, unknown>);
+      }
+    }
+
+    const voteringar = senasteV.map((v) => {
+      const bp = v.beslutspunkt_id ? bpMap.get(v.beslutspunkt_id) : undefined;
+      const analys = analyseraBeslut({
+        forslag: (bp?.["forslag"] as string | null) ?? v.forslag,
+        rubrik: (bp?.["rubrik"] as string | null) ?? v.rubrik,
+        gallde: v.gallde,
+        motforslag_partier: (bp?.["motforslag_partier"] as string | null) ?? v.motforslag_partier,
+        motforslag_nummer: (bp?.["motforslag_nummer"] as string | null) ?? v.motforslag_nummer,
+        vinnare: v.vinnare,
+        ja: v.ja,
+        nej: v.nej,
+      });
+      return {
         ...v,
         arenden: v.arende_id ? { id: v.arende_id, titel: v.arende_titel ?? null } : null,
-      }));
+        innebord: { ja: analys.ja.rubrik, nej: analys.nej.rubrik },
+      };
+    });
 
     return {
       sakfraga: {
@@ -1278,6 +1335,7 @@ export const getSakfraga = createServerFn({ method: "GET" })
       arenden,
       voteringar: voteringar as (Votering & {
         arenden: { id: string; titel: string | null } | null;
+        innebord: { ja: string; nej: string };
       })[],
       utskott: [...new Set(arenden.map((a) => a.organ).filter((v): v is string => !!v))],
     };
@@ -1504,6 +1562,7 @@ export const getBevakadeHandelser = createServerFn({ method: "POST" })
     let flode: (Votering & {
       arenden: { id: string; titel: string | null } | null;
       anledning: string;
+      innebord: { ja: string; nej: string };
     })[] = [];
 
     if (data.sakfragor.length > 0 || data.partier.length > 0 || data.ledamoter.length > 0) {
@@ -1512,22 +1571,52 @@ export const getBevakadeHandelser = createServerFn({ method: "POST" })
         .orderBy("datum", "desc")
         .limit(60)
         .get();
-      flode = senasteSnap.docs
+      const flodeVoteringar = senasteSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc)
         .filter((v) =>
           data.sakfragor.length === 0
             ? true
             : (v.sakfragor ?? []).some((s) => data.sakfragor.includes(s)),
         )
-        .slice(0, 25)
-        .map((v) => ({
+        .slice(0, 25);
+
+      // Beslutspunkterna för flödets voteringar (max 25 dokument) – behövs
+      // för att analyseraBeslut ska kunna förklara vad Ja respektive Nej innebär.
+      const bpIds = flodeVoteringar
+        .map((v) => v.beslutspunkt_id)
+        .filter((id): id is string => !!id);
+      const bpMap = new Map<string, Record<string, unknown>>();
+      if (bpIds.length > 0) {
+        const bpSnaps = await db.getAll(
+          ...bpIds.map((id) => db.collection("beslutspunkter").doc(id)),
+        );
+        for (const s of bpSnaps) {
+          if (s.exists) bpMap.set(s.id, s.data() as Record<string, unknown>);
+        }
+      }
+
+      flode = flodeVoteringar.map((v) => {
+        const bp = v.beslutspunkt_id ? bpMap.get(v.beslutspunkt_id) : undefined;
+        const analys = analyseraBeslut({
+          forslag: (bp?.["forslag"] as string | null) ?? v.forslag,
+          rubrik: (bp?.["rubrik"] as string | null) ?? v.rubrik,
+          gallde: v.gallde,
+          motforslag_partier: (bp?.["motforslag_partier"] as string | null) ?? v.motforslag_partier,
+          motforslag_nummer: (bp?.["motforslag_nummer"] as string | null) ?? v.motforslag_nummer,
+          vinnare: v.vinnare,
+          ja: v.ja,
+          nej: v.nej,
+        });
+        return {
           ...v,
           arenden: v.arende_id ? { id: v.arende_id, titel: v.arende_titel ?? null } : null,
           anledning:
             data.sakfragor.length > 0 && (v.sakfragor ?? []).some((s) => data.sakfragor.includes(s))
               ? "Rör en sakfråga du följer"
               : "Ny votering i riksdagen",
-        }));
+          innebord: { ja: analys.ja.rubrik, nej: analys.nej.rubrik },
+        };
+      });
     }
 
     return {
