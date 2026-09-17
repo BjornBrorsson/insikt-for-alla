@@ -9,6 +9,7 @@ import { useProfil, type SkuggRostTyp } from "@/lib/profil";
 import type { BevakningsTyp } from "@/lib/bevakningar";
 import { getBevakadeHandelser } from "@/lib/insikt.functions";
 import { datum, ledamotsnamn, rensaHtml } from "@/lib/format";
+import { vinnareEtikett } from "@/lib/beslut-analys";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { LedamotKort, PartiMarke, RostDiagram } from "@/components/insikt/delar";
 import { ProfilExportImport } from "@/components/insikt/profil-export-import";
@@ -220,7 +221,7 @@ function BevakningarSida() {
                     </div>
 
                     <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-                      <span>Utfall: {v.vinnare ? `${v.vinnare} vann` : "Utfall saknas"}</span>
+                      <span>Utfall: {vinnareEtikett(v.vinnare)}</span>
                       <Link
                         to="/voteringar/$id"
                         params={{ id: v.id }}

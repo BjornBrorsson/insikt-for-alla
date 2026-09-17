@@ -34,12 +34,8 @@ export function RostGuideKlartext({ analys }: RostGuideProps) {
             </span>
             <span className="text-xs text-muted-foreground font-medium">Utskottets förslag</span>
           </div>
-          <p className="font-medium text-foreground text-sm">
-            {analys.ja.rubrik}
-          </p>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {analys.ja.beskrivning}
-          </p>
+          <p className="font-medium text-foreground text-sm">{analys.ja.rubrik}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{analys.ja.beskrivning}</p>
         </div>
 
         {/* NEJ-röst */}
@@ -48,14 +44,12 @@ export function RostGuideKlartext({ analys }: RostGuideProps) {
             <span className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold text-white bg-[var(--rost-nej)]">
               <span>▼ NEJ-röst</span>
             </span>
-            <span className="text-xs text-muted-foreground font-medium">Motförslaget</span>
+            <span className="text-xs text-muted-foreground font-medium">
+              {analys.motPartier ? `Reservation (${analys.motPartier})` : "Motförslaget"}
+            </span>
           </div>
-          <p className="font-medium text-foreground text-sm">
-            {analys.nej.rubrik}
-          </p>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {analys.nej.beskrivning}
-          </p>
+          <p className="font-medium text-foreground text-sm">{analys.nej.rubrik}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{analys.nej.beskrivning}</p>
         </div>
       </div>
     </div>
@@ -95,15 +89,15 @@ export function BeslutsUtfallKlartext({ analys }: UtfallKlartextProps) {
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Beslutets innebörd i klartext
         </span>
-        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${badgeKlass}`}>
+        <span
+          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${badgeKlass}`}
+        >
           {statusTyp === "avslag" ? "✕ " : statusTyp === "bifall" ? "✓ " : ""}
           {etikett}
         </span>
       </div>
 
-      <p className="text-sm font-medium text-foreground leading-relaxed">
-        {forklaring}
-      </p>
+      <p className="text-sm font-medium text-foreground leading-relaxed">{forklaring}</p>
 
       {tips ? (
         <div className="rounded-lg bg-background/80 border border-border/70 p-3 text-xs text-muted-foreground leading-relaxed space-y-1">

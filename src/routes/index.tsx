@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { getStartsida, getDatastatus } from "@/lib/insikt.functions";
 import { antal, datum, datumKort, rensaHtml } from "@/lib/format";
+import { vinnareEtikett } from "@/lib/beslut-analys";
 import { Fel, Laddar, Tomt } from "@/components/insikt/tillstand";
 import { PartiMarke, RostDiagram } from "@/components/insikt/delar";
 
@@ -125,7 +126,7 @@ function Start() {
                       />
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Utfall: {v.vinnare ? `${v.vinnare} vann omröstningen` : "Utfall saknas"}
+                      Utfall: {vinnareEtikett(v.vinnare)}
                     </p>
                   </li>
                 ))}

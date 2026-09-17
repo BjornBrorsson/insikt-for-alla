@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { getSakfraga } from "@/lib/insikt.functions";
 import { datum, rensaHtml } from "@/lib/format";
+import { vinnareEtikett } from "@/lib/beslut-analys";
 import { EgenBerakning, Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { Bevaka, RostDiagram } from "@/components/insikt/delar";
 
@@ -103,7 +104,7 @@ function SakfragaDetalj() {
                       {v.beteckning} · punkt {v.punkt} · {datum(v.datum)}
                     </span>
                     <span className="font-medium text-foreground">
-                      Utfall: {v.vinnare ? `${v.vinnare} vann` : "Utfall saknas"}
+                      Utfall: {vinnareEtikett(v.vinnare)}
                     </span>
                   </div>
 

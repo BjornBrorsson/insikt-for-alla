@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { listVoteringar, getVoteringsfilter } from "@/lib/insikt.functions";
 import { datum, laddaNerCsv, csv, rensaHtml } from "@/lib/format";
+import { vinnareEtikett } from "@/lib/beslut-analys";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { RostDiagram } from "@/components/insikt/delar";
 
@@ -317,7 +318,7 @@ function VoteringarLista() {
                       </div>
 
                       <span className="font-medium text-foreground">
-                        Utfall: {v.vinnare ? `${v.vinnare} vann` : "Utfall saknas"}
+                        Utfall: {vinnareEtikett(v.vinnare)}
                       </span>
                     </div>
 

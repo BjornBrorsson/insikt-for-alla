@@ -14,10 +14,17 @@ export interface BeslutsUtfall {
 }
 
 export interface BeslutsAnalys {
-  kategori: "avslag_motion" | "bifall_proposition" | "avslag_proposition" | "skrivelse_handlingarna" | "allman";
+  kategori:
+    | "avslag_motion"
+    | "bifall_proposition"
+    | "avslag_proposition"
+    | "skrivelse_handlingarna"
+    | "allman";
   rubrik: string;
   utskottetsForslagKort: string;
   motforslagKort: string;
+  motPartier: string | null;
+  motNummer: string | null;
   ja: BeslutsInnebord;
   nej: BeslutsInnebord;
   utfall: BeslutsUtfall | null;
@@ -92,7 +99,9 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
 
   if (kategori === "avslag_motion") {
     utskottetsForslagKort = "Avslå motionerna";
-    motforslagKort = motKortText ? `Bifalla reservation (${motKortText})` : "Bifalla motionerna (reservation)";
+    motforslagKort = motKortText
+      ? `Bifalla reservation (${motKortText})`
+      : "Bifalla motionerna (reservation)";
     ja = {
       rubrik: "Avslå motionen (Neka förslaget)",
       beskrivning:
@@ -100,7 +109,9 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
       handling: "avsla",
     };
     nej = {
-      rubrik: "Bifalla reservationen (Godkänna förslaget)",
+      rubrik: motPartier
+        ? `Bifalla reservationen (${motPartier})`
+        : "Bifalla reservationen (Godkänna förslaget)",
       beskrivning: motKortText
         ? `Röstar för reservationen (${motKortText}) att riksdagen ska anta motionärernas förslag.`
         : "Röstar för reservationen att riksdagen ska anta motionärernas förslag.",
@@ -108,14 +119,19 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
     };
   } else if (kategori === "bifall_proposition") {
     utskottetsForslagKort = "Anta regeringens lagförslag / proposition";
-    motforslagKort = motKortText ? `Avslå propositionen (${motKortText})` : "Avslå propositionen (reservation)";
+    motforslagKort = motKortText
+      ? `Avslå propositionen (${motKortText})`
+      : "Avslå propositionen (reservation)";
     ja = {
       rubrik: "Anta lagförslaget (Bifalla propositionen)",
-      beskrivning: "Röstar för utskottets förslag att godkänna propositionen och genomföra lagändringen.",
+      beskrivning:
+        "Röstar för utskottets förslag att godkänna propositionen och genomföra lagändringen.",
       handling: "bifalla",
     };
     nej = {
-      rubrik: "Avslå lagförslaget (Stödja reservationen)",
+      rubrik: motPartier
+        ? `Avslå lagförslaget (reservation ${motPartier})`
+        : "Avslå lagförslaget (Stödja reservationen)",
       beskrivning: "Röstar för reservationens motförslag att inte anta regeringens lagförslag.",
       handling: "avsla",
     };
@@ -127,7 +143,9 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
       handling: "avsla",
     };
     nej = {
-      rubrik: "Godkänna propositionen (Reservationen)",
+      rubrik: motPartier
+        ? `Godkänna propositionen (reservation ${motPartier})`
+        : "Godkänna propositionen (Reservationen)",
       beskrivning: "Röstar för reservationen att godkänna regeringens proposition.",
       handling: "bifalla",
     };
@@ -135,12 +153,16 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
     utskottetsForslagKort = "Lägga till handlingarna utan åtgärd";
     ja = {
       rubrik: "Lägga till handlingarna",
-      beskrivning: "Röstar för att avsluta ärendet utan att rikta något tillkännagivande till regeringen.",
+      beskrivning:
+        "Röstar för att avsluta ärendet utan att rikta något tillkännagivande till regeringen.",
       handling: "neutral",
     };
     nej = {
-      rubrik: "Kräva åtgärd (Reservationen)",
-      beskrivning: "Röstar för reservationens förslag om krav eller tillkännagivande till regeringen.",
+      rubrik: motPartier
+        ? `Kräva åtgärd (reservation ${motPartier})`
+        : "Kräva åtgärd (Reservationen)",
+      beskrivning:
+        "Röstar för reservationens förslag om krav eller tillkännagivande till regeringen.",
       handling: "bifalla",
     };
   } else {
@@ -150,7 +172,7 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
       handling: "neutral",
     };
     nej = {
-      rubrik: "Motförslaget / Reservationen",
+      rubrik: motPartier ? `Motförslaget (${motPartier})` : "Motförslaget / Reservationen",
       beskrivning: motKortText
         ? `Röstar för reservationen (${motKortText}) i kammaren.`
         : "Röstar för motförslaget i kammaren.",
@@ -164,8 +186,7 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
   const nejRoster = input.nej ?? 0;
   const vinnareRaw = (input.vinnare ?? "").toLowerCase();
 
-  const utskottetVann =
-    vinnareRaw.includes("utskott") || (jaRoster > nejRoster && jaRoster > 0);
+  const utskottetVann = vinnareRaw.includes("utskott") || (jaRoster > nejRoster && jaRoster > 0);
   const reservationenVann =
     vinnareRaw.includes("reservation") || (nejRoster > jaRoster && nejRoster > 0);
 
@@ -231,8 +252,22 @@ export function analyseraBeslut(input: AnalysInput): BeslutsAnalys {
     rubrik,
     utskottetsForslagKort,
     motforslagKort,
+    motPartier: motPartier || null,
+    motNummer: input.motforslag_nummer?.trim() || null,
     ja,
     nej,
     utfall,
   };
+}
+
+/**
+ * Översätter riksdagens `vinnare`-fält till en etikett som tydliggör
+ * vilket röstalternativ som vann – inte bara vem som formulerade det.
+ */
+export function vinnareEtikett(vinnare: string | null | undefined): string {
+  const v = (vinnare ?? "").toLowerCase();
+  if (v.includes("utskott")) return "Utskottets förslag (Ja) vann";
+  if (v.includes("reservation") || v.includes("motförslag") || v.includes("motforslag"))
+    return "Reservationen (Nej) vann";
+  return vinnare ? `${vinnare} vann` : "Utfall saknas";
 }

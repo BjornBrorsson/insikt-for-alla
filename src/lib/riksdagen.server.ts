@@ -65,6 +65,188 @@ function strRen(value: unknown): string | null {
   return s ? avkodaEntiteter(s) : null;
 }
 
+/* ------------------------------------------------------------------ */
+/* Reservationer i betänkanden (dokumenttext)                          */
+/* ------------------------------------------------------------------ */
+
+/** En reservation/motförslag extraherad ur betänkandets dokumenttext. */
+export interface ReservationPost {
+  nummer: string | null;
+  typ: string | null;
+  partier: string | null;
+  rubrik: string | null;
+  reserverande: string | null;
+  forslag: string | null;
+  motivering: string | null;
+}
+
+/** Avkodar ett helt XML-eskapat dokument (yttersta encoding-lagret). */
+function unescapeXml(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&amp;/g, "&");
+}
+
+/** Tar bort HTML-taggar, kvarvarande entiteter och normaliserar whitespace. */
+function stripTags(html: string): string {
+  return (
+    html
+      // Mjukt bindestreck mellan taggar = riksdagens radbrytningsstavelse –
+      // tas bort med taggarna så att "propositio&#xad;nen" blir "propositionen"
+      .replace(/(<[^>]+>\s*)+&#x[aA][dD];(\s*<[^>]+>)+/g, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/­/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+/** Hittar slutet av det div-block som öppnas vid `start` (balanserad räkning). */
+function divSlut(h: string, start: number): number {
+  const re = /<\/?div[\s>]/g;
+  re.lastIndex = start;
+  let djup = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(h))) {
+    djup += m[0][1] === "/" ? -1 : 1;
+    if (djup === 0) return re.lastIndex;
+  }
+  return h.length;
+}
+
+const MOTIVERING_MAX = 6000;
+
+/**
+ * Parsar reservationer/motförslag ur ett betänkandes dokumenttext
+ * (`dokument/{dokId}/text` = dokumentstatus-XML med HTML-kropp i <html>).
+ * Returnerar Map: beslutspunkt -> reservationer som bestrider punkten.
+ * Tolerant: returnerar det som går att tolka, aldrig kast.
+ * `null` = dokumentet kunde inte hämtas/tolkas alls (förtjänar omförsök),
+ * tom Map = hämtad men inga reservationer hittades.
+ */
+export async function hamtaReservationer(
+  dokId: string,
+): Promise<Map<string, ReservationPost[]> | null> {
+  const perPunkt = new Map<string, ReservationPost[]>();
+  try {
+    const res = await fetch(`${BASE}/dokument/${dokId}/text`);
+    if (!res.ok) return null;
+    const xml = await res.text();
+
+    // Strukturerad mappning: nummer -> punkt/partier/typ
+    const meta = new Map<
+      string,
+      { punkt: string | null; partier: string | null; typ: string | null }
+    >();
+    for (const m of xml.matchAll(/<motforslag>([\s\S]*?)<\/motforslag>/g)) {
+      const b = m[1] ?? "";
+      const nummer = b.match(/<nummer>([^<]*)<\/nummer>/)?.[1]?.trim() || null;
+      if (!nummer) continue;
+      meta.set(nummer, {
+        punkt:
+          b.match(/<utskottsforslag_punkt>([^<]*)<\/utskottsforslag_punkt>/)?.[1]?.trim() || null,
+        partier:
+          b
+            .match(/<partier>([^<]*)<\/partier>/)?.[1]
+            ?.trim()
+            .replace(/"/g, "") || null,
+        typ: b.match(/<typ>([^<]*)<\/typ>/)?.[1]?.trim() || null,
+      });
+    }
+
+    const htmlMatch = xml.match(/<html>([\s\S]*?)<\/html>/);
+    if (!htmlMatch?.[1]) return perPunkt;
+    const h = unescapeXml(htmlMatch[1]);
+
+    // Varje reservation är ett eget div-block markerat 'reservationer'
+    const starts: number[] = [];
+    const re = /<div[^>]*-aw-sdt-title:'reservationer'[^>]*>/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(h))) starts.push(m.index);
+
+    for (let i = 0; i < starts.length; i++) {
+      const start = starts[i]!;
+      const blockSlut = divSlut(h, start);
+      const block = h.slice(start, blockSlut);
+      const text = stripTags(block);
+
+      // Rubrikraden: "Titel, punkt 2 (S, V, MP)" i class="Reservationsrubrik"
+      const rubrikHtml =
+        block.match(/class="Reservationsrubrik"[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>/)?.[1] ??
+        block.match(/class="Reservationsrubrik"[^>]*>([\s\S]*?)<\/p>/)?.[1] ??
+        "";
+      const rubrikFull = stripTags(rubrikHtml);
+      const punktMatch = rubrikFull.match(/punkt\s+(\d+)/);
+      const partierMatch = rubrikFull.match(/\(([^()]*)\)\s*$/);
+      const rubrik = rubrikFull.replace(/,?\s*punkt\s+\d+.*$/, "").trim() || null;
+      const punkt = punktMatch?.[1] ?? null;
+
+      // Reserverande ledamöter: texten direkt efter rubriken, "av X (P), ..."
+      const rubrikPos = rubrikFull ? text.indexOf(rubrikFull) : -1;
+      const efterRubrik = rubrikPos >= 0 ? text.slice(rubrikPos + rubrikFull.length) : text;
+      const avMatch = efterRubrik.match(/^\s*av\s+(.+?)\.\s+Förslag till riksdagsbeslut/);
+      const reserverande = avMatch?.[1]?.trim() || null;
+
+      // Förslagslydelsen: texten mellan "lydelse:" och blockets slut
+      let forslag: string | null = null;
+      const lydelseMatch = text.match(/lydelse\s*:\s*([\s\S]*)$/);
+      if (lydelseMatch?.[1]) forslag = lydelseMatch[1].trim() || null;
+      if (!forslag) {
+        const fsMatch = text.match(/Förslag till riksdagsbeslut\s*([\s\S]*)$/);
+        if (fsMatch?.[1]) forslag = fsMatch[1].trim() || null;
+      }
+
+      // Motiveringen: "Ställningstagande"-avsnittet ligger UTANFÖR
+      // reservation-div:en – det ligger mellan detta block och nästa.
+      const mellan = h.slice(blockSlut, starts[i + 1] ?? h.length);
+      let motivering: string | null = null;
+      const motMatch = stripTags(mellan).match(/Ställningstagande\s*([\s\S]*)$/);
+      const motText = motMatch?.[1];
+      if (motText) {
+        motivering =
+          motText
+            .split(/\s(?:Särskild[at]?\s+yttranden?|Bilagor|Innehållsförteckning)\b/i)[0]
+            ?.trim() || null;
+        if (motivering && motivering.length > MOTIVERING_MAX)
+          motivering = `${motivering.slice(0, MOTIVERING_MAX).trimEnd()}…`;
+      }
+
+      // Nummer: "1." i första tabellcellen, annars ordningsföljden
+      const nummer = text.match(/^\s*(\d+)\./)?.[1] ?? String(i + 1);
+      const metaPost = meta.get(nummer);
+      const malPunkt = punkt ?? metaPost?.punkt ?? null;
+      if (!malPunkt) continue;
+
+      const post: ReservationPost = {
+        nummer,
+        typ: metaPost?.typ ?? null,
+        partier: (partierMatch?.[1] ?? metaPost?.partier ?? "") || null,
+        rubrik,
+        reserverande,
+        forslag,
+        motivering,
+      };
+      const lista = perPunkt.get(malPunkt) ?? [];
+      lista.push(post);
+      perPunkt.set(malPunkt, lista);
+    }
+  } catch {
+    // Reservationsparsning får aldrig stoppa inläsningen – saknas markup
+    // lagras helt enkelt inget (som tidigare).
+    // Returnerar det som hunnit tolkas; ett totalt haveri ger null via tidigare return.
+  }
+  return perPunkt;
+}
+
 function toInt(value: unknown): number | null {
   const s = str(value);
   if (!s) return null;
@@ -324,10 +506,12 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
   const forslag = asArray(
     ((block["dokutskottsforslag"] ?? {}) as Json)["utskottsforslag"] as Json | Json[],
   );
+  const reservationer = await hamtaReservationer(dokId);
   const punktRader = forslag
     .map((f) => {
       const punkt = str(f["punkt"]);
       if (!punkt) return null;
+      const res = reservationer?.get(punkt);
       return {
         id: `${dokId}-${punkt}`,
         data: {
@@ -342,6 +526,9 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
           vinnare: str(f["vinnare"]),
           voteringskrav: str(f["voteringskrav"]),
           votering_id: str(f["votering_id"])?.toLowerCase() ?? null,
+          reservationer: res && res.length > 0 ? res : null,
+          // false = hämtningen misslyckades → backfill försöker igen
+          reservation_inlast: reservationer !== null,
         },
       };
     })
@@ -572,6 +759,69 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
   if (partiPoster.length > 0) await fsSkrivManga("partimajoriteter", partiPoster);
 
   return { voteringar, roster };
+}
+
+/**
+ * Backfill: kompletterar beslutspunkter som har motförslag men ännu inte
+ * fått reservationstexten inläst ur dokumenttexten. Körs stegvis –
+ * `max` ärenden per anrop (riksdagen ratelimitar aggressivt).
+ */
+export async function ingestReservationer(max = 20): Promise<IngestResult> {
+  const startad = new Date().toISOString();
+  try {
+    const db = await fsDb();
+    const snap = await db
+      .collection("beslutspunkter")
+      .where("motforslag_nummer", ">", "")
+      .orderBy("motforslag_nummer")
+      .get();
+
+    const perArende = new Map<string, { id: string; punkt: string }[]>();
+    for (const d of snap.docs) {
+      const x = d.data();
+      if (x["reservation_inlast"]) continue;
+      // "0" betyder att punkten saknar motförslag (t.ex. acklamation)
+      if (!x["motforslag_nummer"] || x["motforslag_nummer"] === "0") continue;
+      const arendeId = x["arende_id"] as string | undefined;
+      const punkt = x["punkt"] as string | undefined;
+      if (!arendeId || !punkt) continue;
+      const lista = perArende.get(arendeId) ?? [];
+      lista.push({ id: d.id, punkt });
+      perArende.set(arendeId, lista);
+    }
+
+    let uppdaterade = 0;
+    let behandlade = 0;
+    for (const [arendeId, punkter] of perArende) {
+      if (behandlade >= max) break;
+      behandlade += 1;
+      const reservationer = await hamtaReservationer(arendeId);
+      // null = hämtning misslyckades (t.ex. rate limit) – lämna omärkta
+      if (reservationer === null) continue;
+      for (const p of punkter) {
+        const res = reservationer.get(p.punkt) ?? null;
+        await db
+          .collection("beslutspunkter")
+          .doc(p.id)
+          .set(
+            {
+              reservationer: res && res.length > 0 ? res : null,
+              reservation_inlast: true,
+            },
+            { merge: true },
+          );
+        if (res && res.length > 0) uppdaterade += 1;
+      }
+    }
+
+    const detalj = `${behandlade} ärenden granskade, ${uppdaterade} beslutspunkter fick reservationstext (${perArende.size} ärenden kvar totalt)`;
+    await logRun("reservationer", "lyckad", uppdaterade, detalj, null, startad);
+    return { typ: "reservationer", antal: uppdaterade, detalj };
+  } catch (e) {
+    const detalj = e instanceof Error ? e.message : String(e);
+    await logRun("reservationer", "misslyckad", 0, detalj, null, startad);
+    throw e;
+  }
 }
 
 /** Läser in betänkanden för ett riksmöte, nyaste först. */

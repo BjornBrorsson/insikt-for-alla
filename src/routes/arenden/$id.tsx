@@ -7,7 +7,7 @@ import { datum, rensaHtml } from "@/lib/format";
 import { EgenBerakning, Fel, Kalla, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { Bevaka, RostDiagram } from "@/components/insikt/delar";
 import { TextMedMotioner } from "@/components/insikt/motion-modal";
-import { analyseraBeslut } from "@/lib/beslut-analys";
+import { analyseraBeslut, vinnareEtikett } from "@/lib/beslut-analys";
 import { ForslagetsResa } from "@/components/insikt/forslagets-resa";
 
 export const Route = createFileRoute("/arenden/$id")({
@@ -277,7 +277,7 @@ function ArendeDetalj() {
                         <span
                           className={`rounded px-2.5 py-0.5 text-xs font-medium border ${badgeFarg}`}
                         >
-                          {punktAnalys.utfall?.etikett ?? `Utfall: ${p.vinnare}`}
+                          {punktAnalys.utfall?.etikett ?? vinnareEtikett(p.vinnare)}
                         </span>
                       ) : null}
                     </div>
@@ -296,6 +296,44 @@ function ArendeDetalj() {
                         {p.motforslag_nummer ? ` (reservation ${p.motforslag_nummer})` : ""}
                       </p>
                     ) : null}
+
+                    {p.reservationer?.map((r, i) => (
+                      <div
+                        key={r.nummer ?? i}
+                        className="rounded-md border border-border/70 bg-[var(--yta)] p-3 text-xs space-y-1.5"
+                      >
+                        <p className="font-medium text-foreground">
+                          {r.typ === "motförslag" ? "Motförslag" : "Reservation"}{" "}
+                          {r.nummer ?? i + 1}
+                          {r.partier ? ` (${r.partier})` : ""}
+                          {r.rubrik ? ` – ${r.rubrik}` : ""}
+                        </p>
+                        {r.reserverande ? (
+                          <p className="text-muted-foreground">
+                            <strong className="text-foreground">Reserverade:</strong>{" "}
+                            {r.reserverande}
+                          </p>
+                        ) : null}
+                        {r.forslag ? (
+                          <p className="text-muted-foreground">
+                            <strong className="text-foreground">
+                              Reservationens förslag till riksdagsbeslut:
+                            </strong>{" "}
+                            <TextMedMotioner text={r.forslag} />
+                          </p>
+                        ) : null}
+                        {r.motivering ? (
+                          <details className="text-muted-foreground">
+                            <summary className="cursor-pointer font-medium text-foreground">
+                              Reservationens motivering
+                            </summary>
+                            <p className="mt-1 whitespace-pre-line">
+                              <TextMedMotioner text={r.motivering} />
+                            </p>
+                          </details>
+                        ) : null}
+                      </div>
+                    ))}
 
                     {koppladVotering ? (
                       <div className="mt-3 border-t border-border/60 pt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -337,9 +375,7 @@ function ArendeDetalj() {
                     <span>
                       Punkt {v.punkt} · {datum(v.datum)}
                     </span>
-                    <span className="font-medium text-foreground">
-                      {v.vinnare ? `${v.vinnare} vann` : "Utfall saknas"}
-                    </span>
+                    <span className="font-medium text-foreground">{vinnareEtikett(v.vinnare)}</span>
                   </div>
 
                   <p className="mt-1 font-medium text-foreground">

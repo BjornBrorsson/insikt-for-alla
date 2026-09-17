@@ -832,6 +832,17 @@ export const getVotering = createServerFn({ method: "GET" })
             motforslag_partier: string | null;
             vinnare: string | null;
             voteringskrav: string | null;
+            reservationer?:
+              | {
+                  nummer: string | null;
+                  typ: string | null;
+                  partier: string | null;
+                  rubrik: string | null;
+                  reserverande: string | null;
+                  forslag: string | null;
+                  motivering: string | null;
+                }[]
+              | null;
           }>("beslutspunkter", votering.beslutspunkt_id)
         : null,
       db.collection("partitotaler").where("votering_id", "==", data.id).get(),
@@ -906,6 +917,7 @@ export const getVotering = createServerFn({ method: "GET" })
               motforslag_partier: beslutspunkt.motforslag_partier,
               vinnare: beslutspunkt.vinnare,
               voteringskrav: beslutspunkt.voteringskrav,
+              reservationer: beslutspunkt.reservationer ?? null,
             }
           : null,
       },
@@ -1152,6 +1164,17 @@ export const getArende = createServerFn({ method: "GET" })
         vinnare: string | null;
         voteringskrav: string | null;
         votering_id: string | null;
+        reservationer:
+          | {
+              nummer: string | null;
+              typ: string | null;
+              partier: string | null;
+              rubrik: string | null;
+              reserverande: string | null;
+              forslag: string | null;
+              motivering: string | null;
+            }[]
+          | null;
       }[],
       voteringar: voteringarSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }) as Votering)
@@ -1669,7 +1692,7 @@ export const korInlasning = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
       .object({
-        typ: z.enum(["ledamoter", "voteringar", "anforanden", "valloften"]),
+        typ: z.enum(["ledamoter", "voteringar", "anforanden", "valloften", "reservationer"]),
         rm: z.string().default("2025/26"),
         max: z.number().default(10),
       })
@@ -1681,8 +1704,12 @@ export const korInlasning = createServerFn({ method: "POST" })
       const { synkaValloftenMotVoteringar } = await import("./valloften-synk.server");
       return await synkaValloftenMotVoteringar();
     }
-    const { ingestAnforanden, ingestLedamoter, ingestRiksmote } =
+    const { ingestAnforanden, ingestLedamoter, ingestReservationer, ingestRiksmote } =
       await import("./riksdagen.server");
+    if (data.typ === "reservationer") {
+      const res = await ingestReservationer(data.max >= 50 ? data.max : 20);
+      return res;
+    }
     if (data.typ === "ledamoter") {
       const res = await ingestLedamoter("tjanstgorande");
       return res;
