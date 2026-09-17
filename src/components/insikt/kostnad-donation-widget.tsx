@@ -166,23 +166,34 @@ export function KostnadDonationWidget() {
                     Frivillig gåva via Swish eller stöd:
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Skicka valfritt belopp till projektets gåvomottagare eller GitHub Sponsors. Märk
-                    gärna meddelandet med{" "}
+                    Skicka valfritt belopp via Swish eller GitHub Sponsors. Märk gärna meddelandet
+                    med{" "}
                     <code className="bg-muted px-1 py-0.5 rounded text-foreground font-mono">
                       Insikt
                     </code>
                     .
                   </p>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <a
-                      href="https://github.com/sponsors/BjornBrorsson"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded border border-border bg-card px-2.5 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      GitHub Sponsors
-                    </a>
+                  <div className="flex items-center gap-3 pt-1">
+                    <img
+                      src="/swish-qr.png"
+                      alt="Swish QR-kod till 070 582 85 26"
+                      className="h-28 w-auto rounded-md border border-border"
+                    />
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        Swish:{" "}
+                        <span className="font-medium font-mono text-foreground">070 582 85 26</span>
+                      </p>
+                      <a
+                        href="https://github.com/sponsors/BjornBrorsson"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded border border-border bg-card px-2.5 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        GitHub Sponsors
+                      </a>
+                    </div>
                   </div>
                 </div>
               </div>
