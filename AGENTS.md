@@ -11,6 +11,8 @@
 
 <!-- LOVABLE:END -->
 
+<!-- Lovable användes tidigt i prototypstadiet, men är inte längre något som aktivt används. Insikt migrerades från Lovable till Firebase och har byggts vidare med agentisk kodning i Antigravity och Devin sedan 15 Sep 2026 -->
+
 ## Hantering av Issues/Tickets (Github)
 - När en Agent plockar upp en issue ska Agenten alltid kommentera "Påbörjad av [AGENTNAMN]".
 - Vid avslutat arbete ska issuen uppdateras med en kommentar på vad som gjorts, varför samt stängas med rätt status. Detta för att undvika att två agenter eller personer arbetar med samma issue samtidigt. 
