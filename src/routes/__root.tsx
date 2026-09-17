@@ -8,10 +8,16 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { KostnadDonationWidget } from "@/components/insikt/kostnad-donation-widget";
+import { lasTema, sparaTema, tillampaTema, type Tema } from "@/lib/tema";
+
+// Körs synkront före första renderingen så att rätt tema appliceras utan
+// blixt av ljust tema hos besökare med mörkt systemläge. Spegla tema.ts.
+const TEMA_SKRIPT = `(function(){try{var t=localStorage.getItem("insikt.tema");var d=t==="dark"||((!t||t==="system")&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);}catch(e){}})();`;
 
 const NAV = [
   { to: "/ledamoter", text: "Ledamöter" },
@@ -102,6 +108,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
       { rel: "manifest", href: "/site.webmanifest" },
     ],
+    scripts: [{ children: TEMA_SKRIPT }],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -111,7 +118,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="sv">
+    <html lang="sv" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
@@ -123,6 +130,40 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function TemaKnapp() {
+  const [tema, setTema] = useState<Tema>("system");
+
+  useEffect(() => {
+    setTema(lasTema());
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const lyssna = () => {
+      if (lasTema() === "system") tillampaTema("system");
+    };
+    mq.addEventListener("change", lyssna);
+    return () => mq.removeEventListener("change", lyssna);
+  }, []);
+
+  const nasta: Tema = tema === "system" ? "light" : tema === "light" ? "dark" : "system";
+  const Ikon = tema === "light" ? Sun : tema === "dark" ? Moon : Monitor;
+  const etikett =
+    tema === "system" ? "Tema: följer systemet" : tema === "light" ? "Tema: ljust" : "Tema: mörkt";
+
+  return (
+    <button
+      type="button"
+      className="rounded-md border border-input p-2 hover:bg-accent"
+      aria-label={`${etikett} – klicka för att byta`}
+      title={etikett}
+      onClick={() => {
+        sparaTema(nasta);
+        setTema(nasta);
+      }}
+    >
+      <Ikon className="h-4 w-4" />
+    </button>
+  );
+}
+
 function Header() {
   const [open, setOpen] = useState(false);
   return (
@@ -131,34 +172,37 @@ function Header() {
         <Link to="/" className="rubrik text-2xl tracking-tight" aria-label="Insikt startsida">
           Insikt
         </Link>
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Huvudmeny">
-          {NAV.map((n) => (
+        <div className="flex items-center gap-2">
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Huvudmeny">
+            {NAV.map((n) => (
+              <Link
+                key={n.to}
+                to={n.to}
+                className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                activeProps={{ className: "bg-accent text-foreground" }}
+              >
+                {n.text}
+              </Link>
+            ))}
             <Link
-              key={n.to}
-              to={n.to}
-              className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-              activeProps={{ className: "bg-accent text-foreground" }}
+              to="/sok"
+              className="ml-1 rounded-md border border-input px-3 py-2 text-sm hover:bg-accent"
             >
-              {n.text}
+              Sök
             </Link>
-          ))}
-          <Link
-            to="/sok"
-            className="ml-1 rounded-md border border-input px-3 py-2 text-sm hover:bg-accent"
+          </nav>
+          <TemaKnapp />
+          <button
+            type="button"
+            className="rounded-md border border-input px-3 py-2 text-sm md:hidden"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={open ? "Stäng huvudmeny" : "Öppna huvudmeny"}
+            onClick={() => setOpen((v) => !v)}
           >
-            Sök
-          </Link>
-        </nav>
-        <button
-          type="button"
-          className="rounded-md border border-input px-3 py-2 text-sm md:hidden"
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          aria-label={open ? "Stäng huvudmeny" : "Öppna huvudmeny"}
-          onClick={() => setOpen((v) => !v)}
-        >
-          Meny
-        </button>
+            Meny
+          </button>
+        </div>
       </div>
       {open ? (
         <nav
