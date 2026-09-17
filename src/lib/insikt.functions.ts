@@ -744,12 +744,42 @@ export const listVoteringar = createServerFn({ method: "GET" })
     });
 
     const totalt = rader.length;
-    const sida = rader.slice((data.sida - 1) * perSida, data.sida * perSida).map((v) => ({
-      ...v,
-      arenden: v.arende_id
-        ? { id: v.arende_id, titel: v.arende_titel ?? null, organ: v.organ ?? null, rm: v.rm }
-        : null,
-    }));
+    const sidRader = rader.slice((data.sida - 1) * perSida, data.sida * perSida);
+
+    // Beslutspunkterna för sidans voteringar (max 25 dokument) – behövs för att
+    // analyseraBeslut ska kunna förklara vad Ja respektive Nej innebär.
+    const db = await fsDb();
+    const bpIds = sidRader.map((v) => v.beslutspunkt_id).filter((id): id is string => !!id);
+    const bpMap = new Map<string, Record<string, unknown>>();
+    if (bpIds.length > 0) {
+      const bpSnaps = await db.getAll(
+        ...bpIds.map((id) => db.collection("beslutspunkter").doc(id)),
+      );
+      for (const s of bpSnaps) {
+        if (s.exists) bpMap.set(s.id, s.data() as Record<string, unknown>);
+      }
+    }
+
+    const sida = sidRader.map((v) => {
+      const bp = v.beslutspunkt_id ? bpMap.get(v.beslutspunkt_id) : undefined;
+      const analys = analyseraBeslut({
+        forslag: (bp?.["forslag"] as string | null) ?? v.forslag,
+        rubrik: (bp?.["rubrik"] as string | null) ?? v.rubrik,
+        gallde: v.gallde,
+        motforslag_partier: (bp?.["motforslag_partier"] as string | null) ?? v.motforslag_partier,
+        motforslag_nummer: (bp?.["motforslag_nummer"] as string | null) ?? v.motforslag_nummer,
+        vinnare: v.vinnare,
+        ja: v.ja,
+        nej: v.nej,
+      });
+      return {
+        ...v,
+        arenden: v.arende_id
+          ? { id: v.arende_id, titel: v.arende_titel ?? null, organ: v.organ ?? null, rm: v.rm }
+          : null,
+        innebord: { ja: analys.ja.rubrik, nej: analys.nej.rubrik },
+      };
+    });
 
     return {
       voteringar: sida as (Votering & {
@@ -759,6 +789,7 @@ export const listVoteringar = createServerFn({ method: "GET" })
           organ: string | null;
           rm: string | null;
         } | null;
+        innebord: { ja: string; nej: string };
       })[],
       totalt,
       perSida,
