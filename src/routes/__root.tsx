@@ -145,13 +145,14 @@ function TemaKnapp() {
 
   const nasta: Tema = tema === "system" ? "light" : tema === "light" ? "dark" : "system";
   const Ikon = tema === "light" ? Sun : tema === "dark" ? Moon : Monitor;
+  const kortText = tema === "system" ? "Auto" : tema === "light" ? "Ljust" : "Mörkt";
   const etikett =
     tema === "system" ? "Tema: följer systemet" : tema === "light" ? "Tema: ljust" : "Tema: mörkt";
 
   return (
     <button
       type="button"
-      className="rounded-md border border-input p-2 hover:bg-accent"
+      className="flex items-center gap-1.5 rounded-md border border-input px-2.5 py-1.5 text-sm hover:bg-accent"
       aria-label={`${etikett} – klicka för att byta`}
       title={etikett}
       onClick={() => {
@@ -160,6 +161,7 @@ function TemaKnapp() {
       }}
     >
       <Ikon className="h-4 w-4" />
+      <span>{kortText}</span>
     </button>
   );
 }
