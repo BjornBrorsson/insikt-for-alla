@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * Schemalagd inläsning från Riksdagens öppna data.
@@ -11,7 +12,9 @@ export const Route = createFileRoute("/api/public/hooks/inlasning")({
       POST: async ({ request }) => {
         const secret = process.env["INGEST_SECRET"];
         const given = request.headers.get("x-insikt-secret");
-        if (!secret || !given || given !== secret) {
+        const givna = Buffer.from(given ?? "", "utf8");
+        const forvantad = Buffer.from(secret ?? "", "utf8");
+        if (!secret || givna.length !== forvantad.length || !timingSafeEqual(givna, forvantad)) {
           return new Response(JSON.stringify({ fel: "Obehörig" }), {
             status: 401,
             headers: { "content-type": "application/json" },

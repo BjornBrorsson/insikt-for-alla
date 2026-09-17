@@ -14,6 +14,37 @@ export async function fsDb() {
   return firestore();
 }
 
+/**
+ * Processintern TTL-cache för hela samlingar som ändras sällan (data uppdateras
+ * bara vid inläsning). Publika endpoints som behöver se hela samlingen använder
+ * denna så att trafik inte kan driva Firestore-läsningar linjärt med antalet
+ * anrop – i värsta fall kostar det en skanning per TTL-intervall.
+ */
+const samlingCache = new Map<string, { rader: unknown[]; utgar: number }>();
+const SAMLING_TTL_MS = 5 * 60_000;
+
+/** Hämtar hela samlingen via cachen. Returnerar en kopia – fritt att sortera/filtrera. */
+export async function fsSamlingCachad<T>(
+  samling: string,
+  ttlMs = SAMLING_TTL_MS,
+): Promise<(T & { id: string })[]> {
+  const nu = Date.now();
+  const hit = samlingCache.get(samling);
+  if (hit && hit.utgar > nu) return [...(hit.rader as (T & { id: string })[])];
+
+  const db = await firestore();
+  const snap = await db.collection(samling).get();
+  const rader = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as T & { id: string });
+  samlingCache.set(samling, { rader, utgar: nu + ttlMs });
+  return [...rader];
+}
+
+/** Tömmer cachen (används av inläsningen så ny data syns direkt). */
+export function fsSamlingCacheRensa(samling?: string) {
+  if (samling) samlingCache.delete(samling);
+  else samlingCache.clear();
+}
+
 /** Tar bort undefined-fält (Firestore accepterar dem inte) och gör om dem till null. */
 export function ren<T extends Record<string, unknown>>(obj: T): T {
   const ut: Record<string, unknown> = {};

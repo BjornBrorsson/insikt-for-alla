@@ -1,4 +1,4 @@
-import { fsDb } from "@/lib/fs-db.server";
+import { fsDb, fsSamlingCacheRensa } from "@/lib/fs-db.server";
 import type { DocumentData } from "firebase-admin/firestore";
 
 export interface SynkResult {
@@ -84,7 +84,8 @@ export async function synkaValloftenMotVoteringar(): Promise<SynkResult> {
 
   const detaljer = `Automatiserad synkning av ${loften.length} vallöften över mandatperioderna 2022–2026, 2018–2022 och 2014–2018. ${synkadeKopplingar} aktiva voteringskopplingar verifierade.`;
 
-  // 4. Logga till inlasningar
+  // 4. Logga till inlasningar och töm cachen så nya synktider syns direkt
+  fsSamlingCacheRensa("valloften");
   await db.collection("inlasningar").add({
     typ: "valloften",
     status: "ok",

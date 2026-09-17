@@ -4,7 +4,7 @@ import type { DocumentData, Query, QueryDocumentSnapshot } from "firebase-admin/
 
 import { requireFirebaseAuth } from "@/integrations/firebase/auth";
 
-import { fsAntal, fsDb, fsHämta, fsNyRad, fsUppdatera } from "./fs-db.server";
+import { fsAntal, fsDb, fsHämta, fsNyRad, fsSamlingCachad, fsUppdatera } from "./fs-db.server";
 import { analyseraBeslut } from "./beslut-analys";
 import { rensaHtml } from "./format";
 
@@ -257,48 +257,47 @@ export const getDatastatus = createServerFn({ method: "GET" }).handler(async () 
 /* ------------------------------------------------------------------ */
 
 export const getStartsida = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await fsDb();
-  const [voteringar, partier, sakfragor, valkretsar] = await Promise.all([
-    db.collection("voteringar").orderBy("datum", "desc").limit(8).get(),
-    db.collection("partier").orderBy("ordning").get(),
-    db.collection("sakfragor").orderBy("ordning").get(),
-    db.collection("ledamoter").where("status", "==", TJANSTGORANDE).get(),
+  const [voteringar, partier, sakfragor, ledamoter] = await Promise.all([
+    fsSamlingCachad<VoteringDoc>("voteringar"),
+    fsSamlingCachad<Parti>("partier"),
+    fsSamlingCachad<{ slug: string; namn: string; beskrivning?: string | null; ordning?: number }>(
+      "sakfragor",
+    ),
+    fsSamlingCachad<Ledamot>("ledamoter"),
   ]);
 
   const valkretsNamn = [
     ...new Set(
-      valkretsar.docs
-        .map((d) => d.data()["valkrets"] as string | null)
+      ledamoter
+        .filter((l) => l.status === TJANSTGORANDE)
+        .map((l) => l.valkrets)
         .filter((v): v is string => !!v),
     ),
   ].sort((a, b) => a.localeCompare(b, "sv"));
 
-  const senasteVoteringar = voteringar.docs
-    .map((d) => {
-      const v = d.data() as VoteringDoc;
-      if (!v.datum) return null;
-      return {
-        ...v,
-        arenden: v.arende_id
-          ? { id: v.arende_id, titel: v.arende_titel ?? null, organ: v.organ ?? null, rm: v.rm }
-          : null,
-      };
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
+  const senasteVoteringar = voteringar
+    .filter((v) => v.datum)
+    .sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? ""))
+    .slice(0, 8)
+    .map((v) => ({
+      ...v,
+      arenden: v.arende_id
+        ? { id: v.arende_id, titel: v.arende_titel ?? null, organ: v.organ ?? null, rm: v.rm }
+        : null,
+    }));
 
   return {
     senasteVoteringar: senasteVoteringar as (Votering & {
       arenden: { id: string; titel: string | null; organ: string | null; rm: string | null } | null;
     })[],
-    partier: partier.docs.map((d) => d.data() as Parti),
-    sakfragor: sakfragor.docs.map((d) => {
-      const s = d.data();
-      return {
-        slug: s["slug"] as string,
-        namn: s["namn"] as string,
-        beskrivning: (s["beskrivning"] as string | null) ?? null,
-      };
-    }),
+    partier: partier.sort((a, b) => a.ordning - b.ordning),
+    sakfragor: sakfragor
+      .sort((a, b) => (a.ordning ?? 0) - (b.ordning ?? 0))
+      .map((s) => ({
+        slug: s.slug,
+        namn: s.namn,
+        beskrivning: s.beskrivning ?? null,
+      })),
     valkretsar: valkretsNamn,
   };
 });
@@ -321,26 +320,14 @@ export const listLedamoter = createServerFn({ method: "GET" })
       .parse(input ?? {}),
   )
   .handler(async ({ data }) => {
-    const db = await fsDb();
-    // En equality i Firestore (parti eller valkrets), resten i minnet –
-    // undviker sammansatta index och matchar gamla ilike-sökningen.
-    let fraga: Query<DocumentData> = db.collection("ledamoter");
-    if (data.parti) fraga = fraga.where("parti", "==", data.parti);
-    else if (data.valkrets) fraga = fraga.where("valkrets", "==", data.valkrets);
-    else if (data.tjanstgoring === "aktuella") fraga = fraga.where("status", "==", TJANSTGORANDE);
+    // Hela samlingen via processcachen – filtrering sker i minnet.
+    let rader = await fsSamlingCachad<
+      Ledamot & { sorteringsnamn?: string | null; utskott?: string[] }
+    >("ledamoter");
 
-    const snap = await fraga.get();
-    let rader = snap.docs.map(
-      (d) =>
-        ({ id: d.id, ...d.data() }) as Ledamot & {
-          sorteringsnamn?: string | null;
-          utskott?: string[];
-        },
-    );
-
-    if (data.parti && data.valkrets) rader = rader.filter((l) => l.valkrets === data.valkrets);
-    if (data.tjanstgoring === "aktuella" && (data.parti || data.valkrets))
-      rader = rader.filter((l) => l.status === TJANSTGORANDE);
+    if (data.parti) rader = rader.filter((l) => l.parti === data.parti);
+    if (data.valkrets) rader = rader.filter((l) => l.valkrets === data.valkrets);
+    if (data.tjanstgoring === "aktuella") rader = rader.filter((l) => l.status === TJANSTGORANDE);
     if (data.tjanstgoring === "historiska") rader = rader.filter((l) => l.status !== TJANSTGORANDE);
     if (data.utskott) rader = rader.filter((l) => (l.utskott ?? []).includes(data.utskott));
     if (data.q) {
@@ -359,25 +346,21 @@ export const listLedamoter = createServerFn({ method: "GET" })
   });
 
 export const getFilterval = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await fsDb();
   const [partier, ledamoter, uppdrag] = await Promise.all([
-    db.collection("partier").orderBy("ordning").get(),
-    db.collection("ledamoter").get(),
-    db.collection("uppdrag").where("typ", "==", "uppdrag").get(),
+    fsSamlingCachad<Parti>("partier"),
+    fsSamlingCachad<Ledamot>("ledamoter"),
+    fsSamlingCachad<{ typ?: string | null; organ_kod?: string | null }>("uppdrag"),
   ]);
   return {
-    partier: partier.docs.map((d) => d.data() as Parti),
-    valkretsar: [
-      ...new Set(
-        ledamoter.docs
-          .map((d) => d.data()["valkrets"] as string | null)
-          .filter((v): v is string => !!v),
-      ),
-    ].sort((a, b) => a.localeCompare(b, "sv")),
+    partier: partier.sort((a, b) => a.ordning - b.ordning),
+    valkretsar: [...new Set(ledamoter.map((l) => l.valkrets).filter((v): v is string => !!v))].sort(
+      (a, b) => a.localeCompare(b, "sv"),
+    ),
     utskott: [
       ...new Set(
-        uppdrag.docs
-          .map((d) => d.data()["organ_kod"] as string | null)
+        uppdrag
+          .filter((u) => u.typ === "uppdrag")
+          .map((u) => u.organ_kod ?? null)
           .filter((v): v is string => !!v && v.length <= 6),
       ),
     ].sort(),
@@ -509,20 +492,18 @@ export const getLedamot = createServerFn({ method: "GET" })
 /* ------------------------------------------------------------------ */
 
 export const listPartier = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await fsDb();
   const [partier, ledamoter] = await Promise.all([
-    db.collection("partier").orderBy("ordning").get(),
-    db.collection("ledamoter").where("status", "==", TJANSTGORANDE).get(),
+    fsSamlingCachad<Parti>("partier"),
+    fsSamlingCachad<Ledamot>("ledamoter"),
   ]);
   const mandat = new Map<string, number>();
-  for (const d of ledamoter.docs) {
-    const p = d.data()["parti"] as string | null;
-    if (p) mandat.set(p, (mandat.get(p) ?? 0) + 1);
+  for (const l of ledamoter) {
+    if (l.status !== TJANSTGORANDE) continue;
+    if (l.parti) mandat.set(l.parti, (mandat.get(l.parti) ?? 0) + 1);
   }
-  return partier.docs.map((d) => {
-    const p = d.data() as Parti;
-    return { ...p, tjanstgorande: mandat.get(p.kod) ?? 0 };
-  });
+  return partier
+    .sort((a, b) => a.ordning - b.ordning)
+    .map((p) => ({ ...p, tjanstgorande: mandat.get(p.kod) ?? 0 }));
 });
 
 export const getParti = createServerFn({ method: "GET" })
@@ -539,19 +520,17 @@ export const getParti = createServerFn({ method: "GET" })
     const fran = data.fran || null;
     const till = data.till || null;
 
-    const [ledamoterSnap, totalerSnap, majoriteterSnap] = await Promise.all([
-      db
-        .collection("ledamoter")
-        .where("parti", "==", data.kod)
-        .where("status", "==", TJANSTGORANDE)
-        .get(),
-      db.collection("partitotaler").where("parti", "==", data.kod).get(),
+    const [allaLedamoter, allaTotaler, majoriteterSnap] = await Promise.all([
+      fsSamlingCachad<Ledamot>("ledamoter"),
+      fsSamlingCachad<PartitotalDoc>("partitotaler"),
       db.collection("partimajoriteter").get(),
     ]);
 
-    const ledamoter = ledamoterSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as Ledamot)
+    const ledamoter = allaLedamoter
+      .filter((l) => l.parti === data.kod && l.status === TJANSTGORANDE)
       .sort((a, b) => a.efternamn.localeCompare(b.efternamn, "sv"));
+
+    const totaler = allaTotaler.filter((t) => t.parti === data.kod);
 
     // parti_sammanhallning: bara voteringar där partiet har en majoritetsröst.
     const sh = { voteringar: 0, avgivna_roster: 0, enligt_majoritet: 0 };
@@ -571,8 +550,7 @@ export const getParti = createServerFn({ method: "GET" })
       };
     }[] = [];
 
-    for (const d of totalerSnap.docs) {
-      const t = d.data() as PartitotalDoc;
+    for (const t of totaler) {
       if (iPeriod(t.datum, fran, till) && t.majoritetsrost) {
         sh.voteringar += 1;
         sh.avgivna_roster += t.ja + t.nej + t.avstar;
@@ -635,12 +613,11 @@ export const getParti = createServerFn({ method: "GET" })
 /* ------------------------------------------------------------------ */
 
 export const listValkretsar = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await fsDb();
-  const snap = await db.collection("ledamoter").where("status", "==", TJANSTGORANDE).get();
+  const ledamoter = await fsSamlingCachad<Ledamot>("ledamoter");
   const karta = new Map<string, number>();
-  for (const d of snap.docs) {
-    const v = d.data()["valkrets"] as string | null;
-    if (v) karta.set(v, (karta.get(v) ?? 0) + 1);
+  for (const l of ledamoter) {
+    if (l.status !== TJANSTGORANDE) continue;
+    if (l.valkrets) karta.set(l.valkrets, (karta.get(l.valkrets) ?? 0) + 1);
   }
   return [...karta.entries()]
     .map(([valkrets, ledamoter]) => ({ valkrets, ledamoter }))
@@ -650,14 +627,9 @@ export const listValkretsar = createServerFn({ method: "GET" }).handler(async ()
 export const getValkrets = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ namn: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    const db = await fsDb();
-    const snap = await db
-      .collection("ledamoter")
-      .where("valkrets", "==", data.namn)
-      .where("status", "==", TJANSTGORANDE)
-      .get();
-    const rader = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as Ledamot)
+    const ledamoter = await fsSamlingCachad<Ledamot>("ledamoter");
+    const rader = ledamoter
+      .filter((l) => l.valkrets === data.namn && l.status === TJANSTGORANDE)
       .sort((a, b) => a.efternamn.localeCompare(b.efternamn, "sv"));
     const fordelning = new Map<string, number>();
     for (const l of rader) if (l.parti) fordelning.set(l.parti, (fordelning.get(l.parti) ?? 0) + 1);
@@ -692,12 +664,10 @@ export const getValkretsMatchningsunderlag = createServerFn({ method: "GET" })
       return { underlag: {} };
     }
     const db = await fsDb();
-    const snap = await db
-      .collection("ledamoter")
-      .where("valkrets", "==", data.valkrets)
-      .where("status", "==", TJANSTGORANDE)
-      .get();
-    const ledamotIds = snap.docs.map((d) => d.id);
+    const ledamoter = await fsSamlingCachad<Ledamot>("ledamoter");
+    const ledamotIds = ledamoter
+      .filter((l) => l.valkrets === data.valkrets && l.status === TJANSTGORANDE)
+      .map((l) => l.id);
     if (!ledamotIds.length) {
       return { underlag: {} };
     }
@@ -752,17 +722,10 @@ export const listVoteringar = createServerFn({ method: "GET" })
       .parse(input ?? {}),
   )
   .handler(async ({ data }) => {
-    const db = await fsDb();
     const perSida = 25;
 
-    // Mest avgränsande filtret i Firestore, resten i minnet.
-    let fraga: Query<DocumentData> = db.collection("voteringar");
-    if (data.sakfraga) fraga = fraga.where("sakfragor", "array-contains", data.sakfraga);
-    else if (data.organ) fraga = fraga.where("organ", "==", data.organ);
-    else if (data.rm) fraga = fraga.where("rm", "==", data.rm);
-
-    const snap = await fraga.get();
-    let rader = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc);
+    // Hela samlingen via processcachen, alla filter i minnet.
+    let rader = await fsSamlingCachad<VoteringDoc>("voteringar");
 
     if (data.rm) rader = rader.filter((v) => v.rm === data.rm);
     if (data.organ) rader = rader.filter((v) => v.organ === data.organ);
@@ -803,29 +766,19 @@ export const listVoteringar = createServerFn({ method: "GET" })
   });
 
 export const getVoteringsfilter = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await fsDb();
   const [voteringar, arenden, sakfragor] = await Promise.all([
-    db.collection("voteringar").get(),
-    db.collection("arenden").get(),
-    db.collection("sakfragor").orderBy("ordning").get(),
+    fsSamlingCachad<VoteringDoc>("voteringar"),
+    fsSamlingCachad<ArendeDoc>("arenden"),
+    fsSamlingCachad<{ slug: string; namn: string; ordning?: number }>("sakfragor"),
   ]);
   return {
-    riksmoten: [
-      ...new Set(
-        voteringar.docs.map((d) => d.data()["rm"] as string | null).filter((v): v is string => !!v),
-      ),
-    ]
+    riksmoten: [...new Set(voteringar.map((v) => v.rm).filter((v): v is string => !!v))]
       .sort()
       .reverse(),
-    utskott: [
-      ...new Set(
-        arenden.docs.map((d) => d.data()["organ"] as string | null).filter((v): v is string => !!v),
-      ),
-    ].sort(),
-    sakfragor: sakfragor.docs.map((d) => {
-      const s = d.data();
-      return { slug: s["slug"] as string, namn: s["namn"] as string };
-    }),
+    utskott: [...new Set(arenden.map((a) => a.organ).filter((v): v is string => !!v))].sort(),
+    sakfragor: sakfragor
+      .sort((a, b) => (a.ordning ?? 0) - (b.ordning ?? 0))
+      .map((s) => ({ slug: s.slug, namn: s.namn })),
   };
 });
 
@@ -1199,24 +1152,28 @@ export const getArende = createServerFn({ method: "GET" })
 /* ------------------------------------------------------------------ */
 
 export const listSakfragor = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await fsDb();
-  const snap = await db.collection("sakfragor").orderBy("ordning").get();
-  return snap.docs.map((d) => {
-    const s = d.data();
-    return {
-      slug: s["slug"] as string,
-      namn: s["namn"] as string,
-      beskrivning: (s["beskrivning"] as string | null) ?? null,
-      utskott: (s["utskott"] as string[]) ?? [],
-      nyckelord: (s["nyckelord"] as string[]) ?? [],
-    };
-  });
+  const sakfragor = await fsSamlingCachad<{
+    slug: string;
+    namn: string;
+    beskrivning?: string | null;
+    utskott?: string[];
+    nyckelord?: string[];
+    ordning?: number;
+  }>("sakfragor");
+  return sakfragor
+    .sort((a, b) => (a.ordning ?? 0) - (b.ordning ?? 0))
+    .map((s) => ({
+      slug: s.slug,
+      namn: s.namn,
+      beskrivning: s.beskrivning ?? null,
+      utskott: s.utskott ?? [],
+      nyckelord: s.nyckelord ?? [],
+    }));
 });
 
 export const getSakfraga = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ slug: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    const db = await fsDb();
     const sakfraga = await fsHämta<{
       slug: string;
       namn: string;
@@ -1225,13 +1182,13 @@ export const getSakfraga = createServerFn({ method: "GET" })
     }>("sakfragor", data.slug);
     if (!sakfraga) return null;
 
-    const [arendenSnap, voteringarSnap] = await Promise.all([
-      db.collection("arenden").where("sakfragor", "array-contains", data.slug).get(),
-      db.collection("voteringar").where("sakfragor", "array-contains", data.slug).get(),
+    const [allaArenden, allaVoteringar] = await Promise.all([
+      fsSamlingCachad<ArendeDoc>("arenden"),
+      fsSamlingCachad<VoteringDoc>("voteringar"),
     ]);
 
-    const arenden = arendenSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as ArendeDoc)
+    const arenden = allaArenden
+      .filter((a) => (a.sakfragor ?? []).includes(data.slug))
       .sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? ""))
       .slice(0, 50)
       .map((a) => ({
@@ -1243,8 +1200,8 @@ export const getSakfraga = createServerFn({ method: "GET" })
         datum: a.datum,
       }));
 
-    const voteringar = voteringarSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc)
+    const voteringar = allaVoteringar
+      .filter((v) => (v.sakfragor ?? []).includes(data.slug))
       .sort((a, b) => {
         if (a.datum && b.datum) return b.datum.localeCompare(a.datum);
         if (a.datum) return -1;
@@ -1281,28 +1238,24 @@ export const sok = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const q = data.q.replace(/[%,]/g, " ").trim();
     if (q.length < 2) return { ledamoter: [], partier: [], arenden: [] };
-    const db = await fsDb();
 
-    const [ledamoterSnap, partierSnap, arendenSnap] = await Promise.all([
-      db.collection("ledamoter").get(),
-      db.collection("partier").get(),
-      db.collection("arenden").get(),
+    const [allaLedamoter, allaPartier, allaArenden] = await Promise.all([
+      fsSamlingCachad<Ledamot & { sorteringsnamn?: string | null }>("ledamoter"),
+      fsSamlingCachad<Parti>("partier"),
+      fsSamlingCachad<ArendeDoc>("arenden"),
     ]);
 
-    const ledamoter = ledamoterSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as Ledamot & { sorteringsnamn?: string | null })
+    const ledamoter = allaLedamoter
       .filter((l) => textSok(q, l.fornamn, l.efternamn, l.sorteringsnamn))
       .sort((a, b) => (a.status ?? "").localeCompare(b.status ?? "", "sv"))
       .slice(0, 12);
 
-    const partier = partierSnap.docs
-      .map((d) => d.data() as Parti)
+    const partier = allaPartier
       .filter((p) => textSok(q, p.namn) || p.kod.toLowerCase() === q.toLowerCase())
       .sort((a, b) => a.ordning - b.ordning)
       .slice(0, 9);
 
-    const arenden = arendenSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as ArendeDoc)
+    const arenden = allaArenden
       .filter((a) => textSok(q, a.titel, a.beteckning, a.id))
       .sort((a, b) => {
         if (a.datum && b.datum) return b.datum.localeCompare(a.datum);
@@ -1467,11 +1420,11 @@ export const getBevakadeHandelser = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
       .object({
-        ledamoter: z.array(z.string()).default([]),
-        partier: z.array(z.string()).default([]),
-        sakfragor: z.array(z.string()).default([]),
-        arenden: z.array(z.string()).default([]),
-        voteringar: z.array(z.string()).default([]),
+        ledamoter: z.array(z.string()).max(200).default([]),
+        partier: z.array(z.string()).max(200).default([]),
+        sakfragor: z.array(z.string()).max(200).default([]),
+        arenden: z.array(z.string()).max(200).default([]),
+        voteringar: z.array(z.string()).max(200).default([]),
       })
       .parse(input ?? {}),
   )
@@ -1556,6 +1509,10 @@ export const rapporteraFel = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
+    const { reserveraAnrop, klientIp } = await import("./rate-limit.server");
+    if (!reserveraAnrop("felrapport", klientIp(), 5, 10 * 60_000)) {
+      throw new Error("För många felrapporter – försök igen om en stund.");
+    }
     await fsNyRad("felrapporter", {
       sida: data.sida || null,
       beskrivning: data.beskrivning,
@@ -1755,12 +1712,17 @@ function beraknaMotionDokId(bet: string): string | null {
 const motionCache = new Map<string, MotionInfo>();
 
 export const getMotion = createServerFn({ method: "GET" })
-  .inputValidator((input: unknown) => z.object({ beteckning: z.string() }).parse(input))
+  .inputValidator((input: unknown) => z.object({ beteckning: z.string().max(100) }).parse(input))
   .handler(async ({ data }): Promise<MotionInfo | null> => {
     const sokBeteckning = data.beteckning.trim();
     if (motionCache.has(sokBeteckning)) {
       return motionCache.get(sokBeteckning)!;
     }
+
+    // Cachemiss → utgående anrop mot data.riksdagen.se. Begränsa frekvensen
+    // så att slumpade beteckningar inte driver utgående trafik eller minne.
+    const { reserveraAnrop, klientIp } = await import("./rate-limit.server");
+    if (!reserveraAnrop("motion", klientIp(), 60, 10 * 60_000)) return null;
 
     try {
       let dokId = beraknaMotionDokId(sokBeteckning);
@@ -1848,6 +1810,11 @@ export const getMotion = createServerFn({ method: "GET" })
         motivering,
       };
 
+      if (motionCache.size >= 500) {
+        // Map håller insättningsordning – äldsta nyckeln ligger först.
+        const aldst = motionCache.keys().next().value;
+        if (aldst !== undefined) motionCache.delete(aldst);
+      }
       motionCache.set(sokBeteckning, resultat);
       return resultat;
     } catch {
@@ -2089,10 +2056,13 @@ export const listValloften = createServerFn({ method: "GET" })
     }));
   });
 
-export const synkaValloften = createServerFn({ method: "POST" }).handler(async () => {
-  const { synkaValloftenMotVoteringar } = await import("./valloften-synk.server");
-  return await synkaValloftenMotVoteringar();
-});
+export const synkaValloften = createServerFn({ method: "POST" })
+  .middleware([requireFirebaseAuth])
+  .handler(async ({ context }) => {
+    await kravAdmin(context as { userId: string });
+    const { synkaValloftenMotVoteringar } = await import("./valloften-synk.server");
+    return await synkaValloftenMotVoteringar();
+  });
 
 /* ------------------------------------------------------------------ */
 /* Riksdagskompass                                                    */
@@ -2127,13 +2097,10 @@ export const getKompassFragor = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const db = await fsDb();
-    let fraga: Query<DocumentData> = db.collection("voteringar");
+    let rader = await fsSamlingCachad<VoteringDoc>("voteringar");
     if (data.sakfraga) {
-      fraga = fraga.where("sakfragor", "array-contains", data.sakfraga);
+      rader = rader.filter((v) => (v.sakfragor ?? []).includes(data.sakfraga));
     }
-
-    const snap = await fraga.get();
-    let rader = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc);
 
     // Filtrera fram frågor från 2022 och framåt som hade debatt och partioenighet
     rader = rader.filter((v) => {
@@ -2349,13 +2316,10 @@ export const getValkretsVsRiksdagen = createServerFn({ method: "GET" })
     const db = await fsDb();
 
     // 1. Hämta valkretsens ledamöter
-    const ledamotSnap = await db
-      .collection("ledamoter")
-      .where("valkrets", "==", data.valkrets)
-      .where("status", "==", TJANSTGORANDE)
-      .get();
-
-    const ledamoter = ledamotSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Ledamot);
+    const allaLedamoter = await fsSamlingCachad<Ledamot>("ledamoter");
+    const ledamoter = allaLedamoter.filter(
+      (l) => l.valkrets === data.valkrets && l.status === TJANSTGORANDE,
+    );
     if (!ledamoter.length) {
       return {
         valkrets: data.valkrets,
@@ -2387,12 +2351,10 @@ export const getValkretsVsRiksdagen = createServerFn({ method: "GET" })
     }
 
     // 3. Hämta voteringar
-    let vFraga: Query<DocumentData> = db.collection("voteringar");
+    let voteringar = await fsSamlingCachad<VoteringDoc>("voteringar");
     if (data.sakfraga) {
-      vFraga = vFraga.where("sakfragor", "array-contains", data.sakfraga);
+      voteringar = voteringar.filter((v) => (v.sakfragor ?? []).includes(data.sakfraga));
     }
-    const voteringSnap = await vFraga.get();
-    let voteringar = voteringSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as VoteringDoc);
 
     // Sortera nyast först och begränsa till senaste 150
     voteringar = voteringar

@@ -11,7 +11,14 @@
  * - rostmatriser/{ledamot_id} och partimajoriteter/{parti} för aggregeringar
  */
 
-import { fsDb, fsNyRad, fsRaderaDar, fsSkrivManga, majoritetsrost } from "./fs-db.server";
+import {
+  fsDb,
+  fsNyRad,
+  fsRaderaDar,
+  fsSamlingCacheRensa,
+  fsSkrivManga,
+  majoritetsrost,
+} from "./fs-db.server";
 
 const BASE = "https://data.riksdagen.se";
 
@@ -98,6 +105,8 @@ async function logRun(
     startad,
     avslutad: new Date().toISOString(),
   });
+  // Ny data har skrivits – töm samlingcachen så att sidorna visar färsk data.
+  if (status === "lyckad") fsSamlingCacheRensa();
 }
 
 /* ------------------------------------------------------------------ */

@@ -62,6 +62,23 @@ export function reserveraAiGenerering(ip: string): RateLimitResultat {
   return { ok: true };
 }
 
+/**
+ * Generisk begränsning för andra publika endpoints (t.ex. felrapporter,
+ * motionsuppslag). Returnerar true om anropet fick plats i fönstret.
+ */
+export function reserveraAnrop(
+  omrade: string,
+  ip: string,
+  max: number,
+  fonsterMs: number,
+): boolean {
+  const nyckel = `${omrade}:${ip}`;
+  const lista = rensa(nyckel, fonsterMs, Date.now());
+  if (lista.length >= max) return false;
+  lista.push(Date.now());
+  return true;
+}
+
 /** Plockar klientens IP från vanliga proxy-headers, annars "okänd". */
 export function klientIp(): string {
   const headers = getRequest()?.headers;

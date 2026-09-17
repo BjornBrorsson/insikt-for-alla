@@ -44,17 +44,37 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+const SAKERHETSHUVUDEN: Record<string, string> = {
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "strict-transport-security": "max-age=15552000",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+};
+
+function medSakerhetshuvuden(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [namn, varde] of Object.entries(SAKERHETSHUVUDEN)) {
+    if (!headers.has(namn)) headers.set(namn, varde);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return medSakerhetshuvuden(await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
       console.error(error);
       return new Response(renderErrorPage(), {
         status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: { "content-type": "text/html; charset=utf-8", ...SAKERHETSHUVUDEN },
       });
     }
   },
