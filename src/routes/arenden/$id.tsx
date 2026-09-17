@@ -55,7 +55,7 @@ function ArendeDetalj() {
   return (
     <div>
       <Sidhuvud
-        rubrik={arende.titel ?? arende.beteckning ?? "Ärende"}
+        rubrik={rensaHtml(arende.titel) || arende.beteckning || "Ärende"}
         lead={`${arende.beteckning ?? arende.id} · ${arende.organ ?? "Utskott"} · Riksmöte ${arende.rm ?? "–"} · ${datum(arende.datum)}`}
         barn={
           <div className="flex flex-wrap items-center gap-3">
@@ -271,7 +271,7 @@ function ArendeDetalj() {
                   >
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <h3 className="font-medium text-foreground">
-                        Punkt {p.punkt}: {p.rubrik ?? "Beslutspunkt"}
+                        Punkt {p.punkt}: {rensaHtml(p.rubrik) || "Beslutspunkt"}
                       </h3>
                       {p.vinnare ? (
                         <span
@@ -344,7 +344,7 @@ function ArendeDetalj() {
 
                   <p className="mt-1 font-medium text-foreground">
                     <Link to="/voteringar/$id" params={{ id: v.id }} className="hover:underline">
-                      {v.rubrik ?? "Votering"}
+                      {rensaHtml(v.rubrik) || "Votering"}
                     </Link>
                   </p>
 

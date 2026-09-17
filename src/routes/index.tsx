@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 
 import { getStartsida, getDatastatus } from "@/lib/insikt.functions";
-import { antal, datum, datumKort } from "@/lib/format";
+import { antal, datum, datumKort, rensaHtml } from "@/lib/format";
 import { Fel, Laddar, Tomt } from "@/components/insikt/tillstand";
 import { PartiMarke, RostDiagram } from "@/components/insikt/delar";
 
@@ -108,13 +108,13 @@ function Start() {
                       params={{ id: v.id }}
                       className="font-medium hover:underline"
                     >
-                      {v.arenden?.titel ?? v.rubrik ?? "Votering"}
+                      {rensaHtml(v.arenden?.titel ?? v.rubrik) || "Votering"}
                     </Link>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {v.beteckning ?? "Beteckning saknas"} · punkt {v.punkt ?? "–"} ·{" "}
                       {datum(v.datum)} · {v.arenden?.organ ?? "Utskott saknas"}
                     </p>
-                    {v.gallde ? <p className="mt-2 text-sm">{v.gallde}</p> : null}
+                    {v.gallde ? <p className="mt-2 text-sm">{rensaHtml(v.gallde)}</p> : null}
                     <div className="mt-3">
                       <RostDiagram
                         ja={v.ja}

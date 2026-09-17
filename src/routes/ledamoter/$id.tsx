@@ -5,7 +5,7 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { getLedamot } from "@/lib/insikt.functions";
-import { datum, datumKort, ledamotsnamn, procent, antal } from "@/lib/format";
+import { datum, datumKort, ledamotsnamn, procent, antal, rensaHtml } from "@/lib/format";
 import { EgenBerakning, Fel, Kalla, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { Bevaka, PartiMarke, RostDiagram, RostMarke } from "@/components/insikt/delar";
 
@@ -270,11 +270,11 @@ function LedamotProfil() {
                           params={{ id: a.arende_id }}
                           className="mt-1 block font-medium text-foreground hover:underline"
                         >
-                          {a.rubrik ?? a.arende_id}
+                          {rensaHtml(a.rubrik) || a.arende_id}
                         </Link>
                       ) : (
                         <p className="mt-1 font-medium text-foreground">
-                          {a.rubrik ?? "Anförande"}
+                          {rensaHtml(a.rubrik) || "Anförande"}
                         </p>
                       )}
                       <div className="mt-2 flex gap-4 text-xs">
@@ -348,13 +348,14 @@ function LedamotProfil() {
                           params={{ id: r.voteringar?.id ?? "" }}
                           className="hover:underline"
                         >
-                          {r.voteringar?.arenden?.titel ?? r.voteringar?.rubrik ?? "Votering"}
+                          {rensaHtml(r.voteringar?.arenden?.titel ?? r.voteringar?.rubrik) ||
+                            "Votering"}
                         </Link>
                       </h3>
 
                       {r.voteringar?.gallde ? (
                         <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                          {r.voteringar.gallde}
+                          {rensaHtml(r.voteringar.gallde)}
                         </p>
                       ) : null}
 

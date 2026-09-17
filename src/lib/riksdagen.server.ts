@@ -31,6 +31,33 @@ function str(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** Riksdagens XML→JSON lämnar kvar HTML-entiteter i texter – avkoda dem. */
+function avkodaEntiteter(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&aring;/gi, "å")
+    .replace(/&Aring;/gi, "Å")
+    .replace(/&auml;/gi, "ä")
+    .replace(/&Auml;/gi, "Ä")
+    .replace(/&ouml;/gi, "ö")
+    .replace(/&Ouml;/gi, "Ö")
+    .replace(/&eacute;/gi, "é")
+    .replace(/&Eacute;/gi, "É")
+    .replace(/&sect;/gi, "§")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
+/** Som str(), men avkodar HTML-entiteter ur ren text. */
+function strRen(value: unknown): string | null {
+  const s = str(value);
+  return s ? avkodaEntiteter(s) : null;
+}
+
 function toInt(value: unknown): number | null {
   const s = str(value);
   if (!s) return null;
@@ -120,7 +147,7 @@ export async function ingestLedamoter(scope: "tjanstgorande" | "samtliga"): Prom
           uppdragRader.push({
             ledamot_id: id,
             organ_kod: organ,
-            organ_namn: str(u["uppgift"] as unknown) ?? null,
+            organ_namn: strRen(u["uppgift"] as unknown) ?? null,
             roll,
             typ: str(u["typ"]),
             status: str(u["status"]),
@@ -228,7 +255,7 @@ function lasPartitotaler(html: unknown): {
   const block = (html ?? {}) as Json;
   const table = (block["table"] ?? {}) as Json;
   const caption = (table["caption"] ?? {}) as Json;
-  const gallde = str(caption["#text"]) ?? str(caption["b"]);
+  const gallde = strRen(caption["#text"]) ?? strRen(caption["b"]);
   const tbody = (table["tbody"] ?? {}) as Json;
   const rader: PartiTotal[] = [];
   for (const tr of asArray(tbody["tr"] as Json | Json[])) {
@@ -255,7 +282,7 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
   const dok = (block["dokument"] ?? {}) as Json;
   const rm = str(dok["rm"]);
   const bet = str(dok["beteckning"]);
-  const titel = str(dok["titel"]) ?? dokId;
+  const titel = strRen(dok["titel"]) ?? dokId;
   const organ = str(dok["organ"]);
 
   const sakfragor = await hamtaSakfragor();
@@ -272,7 +299,7 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
         organ,
         doktyp: str(dok["doktyp"]),
         titel,
-        undertitel: str(dok["subtitel"]),
+        undertitel: strRen(dok["subtitel"]),
         datum: toDate(dok["datum"]),
         publicerad: str(dok["publicerad"]),
         kalla_url_html: `https://data.riksdagen.se/dokument/${dokId}`,
@@ -298,11 +325,11 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
           id: `${dokId}-${punkt}`,
           arende_id: dokId,
           punkt,
-          rubrik: str(f["rubrik"]),
-          forslag: str(f["forslag"]),
+          rubrik: strRen(f["rubrik"]),
+          forslag: strRen(f["forslag"]),
           beslutstyp: str(f["beslutstyp"]),
           motforslag_nummer: str(f["motforslag_nummer"]),
-          motforslag_partier: str(f["motforslag_partier"])?.replace(/"/g, "") ?? null,
+          motforslag_partier: strRen(f["motforslag_partier"])?.replace(/"/g, "") ?? null,
           vinnare: str(f["vinnare"]),
           voteringskrav: str(f["voteringskrav"]),
           votering_id: str(f["votering_id"])?.toLowerCase() ?? null,
@@ -368,7 +395,7 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
     const punkt = str(f["punkt"]);
     if (!voteringId || !punkt) continue;
     const { gallde, rader, totalt } = lasPartitotaler(f["votering_sammanfattning_html"]);
-    const rubrik = str(f["rubrik"]);
+    const rubrik = strRen(f["rubrik"]);
     const vDatum = datumPerVotering.get(voteringId) ?? null;
     const vTitel = titel || rubrik;
 
@@ -478,8 +505,8 @@ export async function ingestArende(dokId: string): Promise<{ voteringar: number;
       if (!vid || !punkt) continue;
       voteringMeta.set(vid, {
         datum: datumPerVotering.get(vid) ?? null,
-        titel: titel || str(f["rubrik"]),
-        rubrik: str(f["rubrik"]),
+        titel: titel || strRen(f["rubrik"]),
+        rubrik: strRen(f["rubrik"]),
         beteckning: bet,
         punkt,
       });
@@ -697,12 +724,12 @@ export async function ingestAnforanden(sz = 500, rm?: string): Promise<IngestRes
           id,
           arende_id: relId,
           ledamot_id: str(r["intressent_id"]),
-          talare: str(r["talare"]),
+          talare: strRen(r["talare"]),
           parti: str(r["parti"]),
           nummer: toInt(r["anforande_nummer"]),
           replik: str(r["replik"]) === "Y",
-          rubrik: str(r["avsnittsrubrik"]),
-          underrubrik: str(r["underrubrik"]),
+          rubrik: strRen(r["avsnittsrubrik"]),
+          underrubrik: strRen(r["underrubrik"]),
           kammaraktivitet: str(r["kammaraktivitet"]),
           protokoll_dok_id: str(r["dok_id"]),
           datum: toDate(r["dok_datum"]),

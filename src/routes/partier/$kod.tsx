@@ -5,7 +5,7 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { getParti } from "@/lib/insikt.functions";
-import { datum, laddaNerCsv, csv, procent, antal } from "@/lib/format";
+import { datum, laddaNerCsv, csv, procent, antal, rensaHtml } from "@/lib/format";
 import { EgenBerakning, Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { Bevaka, LedamotKort, PartiMarke, RostDiagram } from "@/components/insikt/delar";
 
@@ -49,7 +49,11 @@ function PartiDetalj() {
         <Tomt
           rubrik="Partiet hittades inte"
           text={`Inget parti med partikoden ”${kod}” finns registrerat i Insikt.`}
-          barn={<Link to="/partier" className="text-sm underline">Tillbaka till partier</Link>}
+          barn={
+            <Link to="/partier" className="text-sm underline">
+              Tillbaka till partier
+            </Link>
+          }
         />
       </div>
     );
@@ -118,19 +122,18 @@ function PartiDetalj() {
               <span className="text-4xl font-normal text-foreground">
                 {procent(sammanhallning.enligt_majoritet, sammanhallning.avgivna_roster)}
               </span>
-              <span className="text-xs text-muted-foreground">
-                av avgivna röster
-              </span>
+              <span className="text-xs text-muted-foreground">av avgivna röster</span>
             </div>
 
             <p className="mt-2 text-xs text-muted-foreground">
-              Baserat på {antal(sammanhallning.enligt_majoritet)} av {antal(sammanhallning.avgivna_roster)} röster
-              över {antal(sammanhallning.voteringar)} voteringar under perioden.
+              Baserat på {antal(sammanhallning.enligt_majoritet)} av{" "}
+              {antal(sammanhallning.avgivna_roster)} röster över {antal(sammanhallning.voteringar)}{" "}
+              voteringar under perioden.
             </p>
 
             <EgenBerakning>
-              Andel avgivna röster (Ja, Nej, Avstår) som sammanfaller med det röstalternativ som fick flest
-              röster inom partiet i omröstningen. Frånvaro exkluderas.
+              Andel avgivna röster (Ja, Nej, Avstår) som sammanfaller med det röstalternativ som
+              fick flest röster inom partiet i omröstningen. Frånvaro exkluderas.
             </EgenBerakning>
           </section>
 
@@ -143,7 +146,8 @@ function PartiDetalj() {
 
             <div className="mt-4 space-y-2.5">
               {likhet.map((item) => {
-                const proc = item.gemensamma > 0 ? Math.round((item.lika / item.gemensamma) * 100) : 0;
+                const proc =
+                  item.gemensamma > 0 ? Math.round((item.lika / item.gemensamma) * 100) : 0;
                 return (
                   <div key={item.parti} className="flex items-center justify-between gap-3 text-sm">
                     <div className="flex items-center gap-2 min-w-24">
@@ -223,7 +227,8 @@ function PartiDetalj() {
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {v.voteringar?.beteckning} · punkt {v.voteringar?.punkt} · {datum(v.voteringar?.datum)}
+                    {v.voteringar?.beteckning} · punkt {v.voteringar?.punkt} ·{" "}
+                    {datum(v.voteringar?.datum)}
                   </span>
                   <Link
                     to="/voteringar/$id"
@@ -240,12 +245,14 @@ function PartiDetalj() {
                     params={{ id: v.voteringar?.id ?? "" }}
                     className="hover:underline"
                   >
-                    {v.voteringar?.arenden?.titel ?? v.voteringar?.rubrik ?? "Votering"}
+                    {rensaHtml(v.voteringar?.arenden?.titel ?? v.voteringar?.rubrik) || "Votering"}
                   </Link>
                 </p>
 
                 {v.voteringar?.gallde ? (
-                  <p className="mt-1 text-xs text-muted-foreground">{v.voteringar.gallde}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {rensaHtml(v.voteringar.gallde)}
+                  </p>
                 ) : null}
 
                 <div className="mt-3">

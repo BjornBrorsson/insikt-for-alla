@@ -28,8 +28,8 @@ export function antal(n: number | null | undefined): string {
 export const rostStil: Record<string, { klass: string; tecken: string; text: string }> = {
   Ja: { klass: "bg-[var(--rost-ja)]", tecken: "▲", text: "Ja" },
   Nej: { klass: "bg-[var(--rost-nej)]", tecken: "▼", text: "Nej" },
-  "Avstår": { klass: "bg-[var(--rost-avstar)]", tecken: "■", text: "Avstår" },
-  "Frånvarande": { klass: "bg-[var(--rost-franvarande)]", tecken: "○", text: "Frånvarande" },
+  Avstår: { klass: "bg-[var(--rost-avstar)]", tecken: "■", text: "Avstår" },
+  Frånvarande: { klass: "bg-[var(--rost-franvarande)]", tecken: "○", text: "Frånvarande" },
 };
 
 export function ledamotsnamn(l: { fornamn: string; efternamn: string }): string {

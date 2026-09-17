@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { getSakfraga } from "@/lib/insikt.functions";
-import { datum } from "@/lib/format";
+import { datum, rensaHtml } from "@/lib/format";
 import { EgenBerakning, Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { Bevaka, RostDiagram } from "@/components/insikt/delar";
 
@@ -37,7 +37,11 @@ function SakfragaDetalj() {
         <Tomt
           rubrik="Sakfrågan hittades inte"
           text={`Inget ämnesområde med beteckningen ”${slug}” finns i Insikt.`}
-          barn={<Link to="/sakfragor" className="text-sm underline">Till alla sakfrågor</Link>}
+          barn={
+            <Link to="/sakfragor" className="text-sm underline">
+              Till alla sakfrågor
+            </Link>
+          }
         />
       </div>
     );
@@ -66,8 +70,8 @@ function SakfragaDetalj() {
 
       <div className="mx-auto max-w-6xl px-4 py-10 space-y-10">
         <EgenBerakning>
-          Ämnesindelningen är Insikts egen kategorisering. Ärenden kopplas hit via utskott ({utskott.join(", ")})
-          och automatiska textanalyser.
+          Ämnesindelningen är Insikts egen kategorisering. Ärenden kopplas hit via utskott (
+          {utskott.join(", ")}) och automatiska textanalyser.
         </EgenBerakning>
 
         {/* Senaste voteringar */}
@@ -104,17 +108,15 @@ function SakfragaDetalj() {
                   </div>
 
                   <h3 className="mt-1.5 font-medium text-foreground">
-                    <Link
-                      to="/voteringar/$id"
-                      params={{ id: v.id }}
-                      className="hover:underline"
-                    >
-                      {v.arenden?.titel ?? v.rubrik ?? "Votering"}
+                    <Link to="/voteringar/$id" params={{ id: v.id }} className="hover:underline">
+                      {rensaHtml(v.arenden?.titel ?? v.rubrik) || "Votering"}
                     </Link>
                   </h3>
 
                   {v.gallde ? (
-                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{v.gallde}</p>
+                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                      {rensaHtml(v.gallde)}
+                    </p>
                   ) : null}
 
                   <div className="mt-3">

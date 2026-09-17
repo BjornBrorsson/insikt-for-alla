@@ -30,7 +30,7 @@ import {
   listSakfragor,
   type KompassFraga,
 } from "@/lib/insikt.functions";
-import { datum, procent } from "@/lib/format";
+import { datum, procent, rensaHtml } from "@/lib/format";
 import { PartiMarke } from "@/components/insikt/delar";
 import { Laddar, Sidhuvud } from "@/components/insikt/tillstand";
 
@@ -554,7 +554,7 @@ function KompassSida() {
                                         params={{ id: j.fraga.id }}
                                         className="font-medium hover:underline text-foreground truncate inline-flex items-center gap-1"
                                       >
-                                        <span>{j.fraga.rubrik}</span>
+                                        <span>{rensaHtml(j.fraga.rubrik)}</span>
                                         <ExternalLink className="h-3 w-3 opacity-60" />
                                       </Link>
                                     </div>
@@ -682,12 +682,12 @@ function KompassSida() {
                   </div>
 
                   <h3 className="text-xl sm:text-2xl font-semibold text-foreground">
-                    {aktivFraga.rubrik}
+                    {rensaHtml(aktivFraga.rubrik)}
                   </h3>
 
                   {aktivFraga.gallde ? (
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      {aktivFraga.gallde}
+                      {rensaHtml(aktivFraga.gallde)}
                     </p>
                   ) : null}
                 </div>
@@ -709,7 +709,7 @@ function KompassSida() {
                       JA innebär:
                     </span>
                     <p className="text-xs font-medium text-foreground">
-                      {aktivFraga.jaInnebord.rubrik}
+                      {rensaHtml(aktivFraga.jaInnebord.rubrik)}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {aktivFraga.jaInnebord.beskrivning}
@@ -722,7 +722,7 @@ function KompassSida() {
                       NEJ innebär:
                     </span>
                     <p className="text-xs font-medium text-foreground">
-                      {aktivFraga.nejInnebord.rubrik}
+                      {rensaHtml(aktivFraga.nejInnebord.rubrik)}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {aktivFraga.nejInnebord.beskrivning}

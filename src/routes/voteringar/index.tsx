@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { z } from "zod";
 
 import { listVoteringar, getVoteringsfilter } from "@/lib/insikt.functions";
-import { datum, laddaNerCsv, csv } from "@/lib/format";
+import { datum, laddaNerCsv, csv, rensaHtml } from "@/lib/format";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { RostDiagram } from "@/components/insikt/delar";
 
@@ -120,15 +120,18 @@ function VoteringarLista() {
       v.datum ?? "",
       v.beteckning ?? "",
       v.punkt ?? "",
-      v.arenden?.titel ?? v.rubrik ?? "",
-      v.gallde ?? "",
+      rensaHtml(v.arenden?.titel ?? v.rubrik),
+      rensaHtml(v.gallde),
       v.ja,
       v.nej,
       v.avstar,
       v.franvarande,
       v.vinnare ?? "",
     ]);
-    laddaNerCsv(`voteringar_${new Date().toISOString().slice(0, 10)}.csv`, csv([rubriker, ...rader]));
+    laddaNerCsv(
+      `voteringar_${new Date().toISOString().slice(0, 10)}.csv`,
+      csv([rubriker, ...rader]),
+    );
   }
 
   const perSida = query.data?.perSida || 25;
@@ -175,7 +178,10 @@ function VoteringarLista() {
 
             {/* Riksmöte */}
             <div>
-              <label htmlFor="filter-rm" className="block text-xs font-medium text-muted-foreground">
+              <label
+                htmlFor="filter-rm"
+                className="block text-xs font-medium text-muted-foreground"
+              >
                 Riksmöte (arbetsår)
               </label>
               <select
@@ -195,7 +201,10 @@ function VoteringarLista() {
 
             {/* Utskott */}
             <div>
-              <label htmlFor="filter-organ" className="block text-xs font-medium text-muted-foreground">
+              <label
+                htmlFor="filter-organ"
+                className="block text-xs font-medium text-muted-foreground"
+              >
                 Utskott
               </label>
               <select
@@ -215,7 +224,10 @@ function VoteringarLista() {
 
             {/* Sakfråga */}
             <div>
-              <label htmlFor="filter-sakfraga" className="block text-xs font-medium text-muted-foreground">
+              <label
+                htmlFor="filter-sakfraga"
+                className="block text-xs font-medium text-muted-foreground"
+              >
                 Sakfråga (Insikts ämne)
               </label>
               <select
@@ -315,12 +327,12 @@ function VoteringarLista() {
                         params={{ id: v.id }}
                         className="hover:underline text-foreground"
                       >
-                        {v.arenden?.titel ?? v.rubrik ?? "Votering"}
+                        {rensaHtml(v.arenden?.titel ?? v.rubrik) || "Votering"}
                       </Link>
                     </h2>
 
                     {v.gallde ? (
-                      <p className="mt-1.5 text-sm text-foreground/90">{v.gallde}</p>
+                      <p className="mt-1.5 text-sm text-foreground/90">{rensaHtml(v.gallde)}</p>
                     ) : null}
 
                     <div className="mt-4">

@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 
 import { getVotering } from "@/lib/insikt.functions";
-import { datum, laddaNerCsv, csv, antal } from "@/lib/format";
+import { datum, laddaNerCsv, csv, antal, rensaHtml } from "@/lib/format";
 import { Fel, Kalla, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { Bevaka, PartiMarke, RostDiagram, RostMarke } from "@/components/insikt/delar";
 import { TextMedMotioner } from "@/components/insikt/motion-modal";
@@ -125,7 +125,7 @@ function VoteringDetalj() {
     laddaNerCsv(`votering_${id}_roster.csv`, csv([rubriker, ...rader]));
   }
 
-  const titel = votering.arenden?.titel ?? votering.rubrik ?? "Votering";
+  const titel = rensaHtml(votering.arenden?.titel ?? votering.rubrik) || "Votering";
 
   return (
     <div>
@@ -176,7 +176,7 @@ function VoteringDetalj() {
               <div className="rounded-lg border border-border/80 bg-[var(--yta)] p-4 text-xs space-y-2">
                 <p className="font-medium text-foreground">
                   Beslutspunkt {votering.beslutspunkter.punkt}:{" "}
-                  {votering.beslutspunkter.rubrik ?? ""}
+                  {rensaHtml(votering.beslutspunkter.rubrik)}
                 </p>
                 {votering.beslutspunkter.forslag ? (
                   <div className="text-muted-foreground leading-relaxed">

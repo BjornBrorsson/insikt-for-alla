@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { getVoteringsfilter, listPartier, listValloften } from "@/lib/insikt.functions";
-import { datum } from "@/lib/format";
+import { datum, rensaHtml } from "@/lib/format";
 import { EgenBerakning, Fel, Kalla, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { PartiMarke, RostDiagram, RostMarke } from "@/components/insikt/delar";
 
@@ -253,12 +253,12 @@ function ValloftenSida() {
                               params={{ id: v.id }}
                               className="mt-2 block text-sm font-medium text-[var(--accent-insikt)] hover:underline"
                             >
-                              {v.arende_titel ?? v.rubrik ?? "Votering"}
-                              {v.rubrik && v.arende_titel ? ` – ${v.rubrik}` : ""}
+                              {rensaHtml(v.arende_titel ?? v.rubrik) || "Votering"}
+                              {v.rubrik && v.arende_titel ? ` – ${rensaHtml(v.rubrik)}` : ""}
                             </Link>
                             {v.gallde ? (
                               <p className="mt-1 text-xs text-muted-foreground">
-                                Röstningen gällde: {v.gallde}
+                                Röstningen gällde: {rensaHtml(v.gallde)}
                               </p>
                             ) : null}
 

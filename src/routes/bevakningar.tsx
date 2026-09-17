@@ -8,7 +8,7 @@ import { Vote } from "lucide-react";
 import { useProfil, type SkuggRostTyp } from "@/lib/profil";
 import type { BevakningsTyp } from "@/lib/bevakningar";
 import { getBevakadeHandelser } from "@/lib/insikt.functions";
-import { datum, ledamotsnamn } from "@/lib/format";
+import { datum, ledamotsnamn, rensaHtml } from "@/lib/format";
 import { Fel, Laddar, Sidhuvud, Tomt } from "@/components/insikt/tillstand";
 import { LedamotKort, PartiMarke, RostDiagram } from "@/components/insikt/delar";
 import { ProfilExportImport } from "@/components/insikt/profil-export-import";
@@ -197,7 +197,7 @@ function BevakningarSida() {
                         params={{ id: v.id }}
                         className="hover:underline text-foreground"
                       >
-                        {v.arenden?.titel ?? v.rubrik ?? "Votering"}
+                        {rensaHtml(v.arenden?.titel ?? v.rubrik) || "Votering"}
                       </Link>
                     </h3>
 
@@ -206,7 +206,7 @@ function BevakningarSida() {
                     </p>
 
                     {v.gallde ? (
-                      <p className="mt-2 text-sm text-foreground/90">{v.gallde}</p>
+                      <p className="mt-2 text-sm text-foreground/90">{rensaHtml(v.gallde)}</p>
                     ) : null}
 
                     <div className="mt-4">
@@ -375,7 +375,7 @@ function BevakningarSida() {
                           params={{ id: v.id }}
                           className="font-medium hover:underline"
                         >
-                          {v.arenden?.titel ?? v.rubrik ?? "Votering"}
+                          {rensaHtml(v.arenden?.titel ?? v.rubrik) || "Votering"}
                         </Link>
                         <p className="text-xs text-muted-foreground">
                           {v.beteckning} · {datum(v.datum)}

@@ -6,6 +6,7 @@ import { requireFirebaseAuth } from "@/integrations/firebase/auth";
 
 import { fsAntal, fsDb, fsHämta, fsNyRad, fsUppdatera } from "./fs-db.server";
 import { analyseraBeslut } from "./beslut-analys";
+import { rensaHtml } from "./format";
 
 /* ------------------------------------------------------------------ */
 /* Typer                                                              */
@@ -176,7 +177,8 @@ function harSakfraga(sakfragor: string[] | undefined, sakfraga?: string | null) 
 
 function textSok(q: string, ...falt: (string | null | undefined)[]) {
   const s = q.toLowerCase();
-  return falt.some((f) => f?.toLowerCase().includes(s));
+  // Källfälten kan innehålla HTML-entiteter (t.ex. &auml;) – avkoda innan matchning.
+  return falt.some((f) => f && rensaHtml(f).toLowerCase().includes(s));
 }
 
 function uppdragOverlappar(u: UppdragDoc, fran: string | null, till: string | null) {

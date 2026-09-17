@@ -36,13 +36,8 @@ export function TextMedMotioner({
 
   if (!text) return null;
 
-  // Rensa HTML-taggar som <BR/> och <BR>
-  const renText = text
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .trim();
+  // Rensa HTML-taggar (<BR/>) och HTML-entiteter (&ouml;, &#160; osv.)
+  const renText = rensaHtml(text);
 
   const matches: MatchDel[] = [];
 
